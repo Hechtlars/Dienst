@@ -1,6 +1,8 @@
 'use strict';
 
 const STORAGE_KEY = 'dienst-webapp-v1';
+const BACKUP_DATE_KEY = 'dienst-last-backup';
+const BACKUP_REMINDER_DAYS = 30;
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -10,6 +12,10 @@ const title = document.getElementById('pageTitle');
 const modal = document.getElementById('modal');
 const modalContent = document.getElementById('modalContent');
 const importInput = document.getElementById('importInput');
+const updateBanner = document.getElementById('updateBanner');
+const updateButton = document.getElementById('updateButton');
+const backupReminder = document.getElementById('backupReminder');
+const backupReminderButton = document.getElementById('backupReminderButton');
 
 document.querySelectorAll('.tab').forEach(button => {
   button.addEventListener('click', () => {
@@ -20,6 +26,8 @@ document.querySelectorAll('.tab').forEach(button => {
 });
 document.getElementById('backupButton').addEventListener('click', openBackupMenu);
 importInput.addEventListener('change', importBackup);
+updateButton.addEventListener('click', applyUpdate);
+backupReminderButton.addEventListener('click', openBackupMenu);
 
 function loadState() {
   try {
@@ -27,7 +35,7 @@ function loadState() {
     return parsed && Array.isArray(parsed.duties) ? parsed : { duties: [] };
   } catch { return { duties: [] }; }
 }
-function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showBackupReminder(); }
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }
 function pad(n) { return String(n).padStart(2, '0'); }
 function localDateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`; }
@@ -46,6 +54,41 @@ function hourLabel(value) { return `${value} ${value === 1 ? 'Stunde' : 'Stunden
 function sortedDuties() { return [...state.duties].sort((a,b)=>dutyStart(b)-dutyStart(a)); }
 function activeDuty() { const now = new Date(); return sortedDuties().find(d=>dutyStart(d)<=now && now<dutyEnd(d)); }
 function escapeHtml(s) { return String(s).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+function isValidBackup(data) {
+  if (!data || !Array.isArray(data.duties)) return false;
+  return data.duties.every(duty => {
+    if (!duty || typeof duty.id !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(duty.date) || !Array.isArray(duty.entries)) return false;
+    return duty.entries.every(entry => {
+      if (!entry || typeof entry.id !== 'string' || !['Telefonisch', 'Im Haus'].includes(entry.type)) return false;
+      const start = new Date(entry.start), end = new Date(entry.end);
+      return Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && end > start;
+    });
+  });
+}
+
+function daysSince(dateString) {
+  if (!dateString) return Infinity;
+  const date = new Date(dateString);
+  return Number.isFinite(date.getTime()) ? Math.floor((Date.now() - date.getTime()) / 86400000) : Infinity;
+}
+
+function showBackupReminder() {
+  const hasData = state.duties.some(d => d.entries.length > 0);
+  const overdue = daysSince(localStorage.getItem(BACKUP_DATE_KEY)) >= BACKUP_REMINDER_DAYS;
+  backupReminder.hidden = !(hasData && overdue);
+}
+
+let waitingWorker = null;
+function showUpdate(worker) {
+  waitingWorker = worker;
+  updateBanner.hidden = false;
+}
+function applyUpdate() {
+  if (waitingWorker) waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+  else window.location.reload();
+}
+
 
 function render() {
   if (currentView === 'dienst') renderDuty(); else renderMonth();
@@ -165,8 +208,27 @@ function openBackupMenu(){
   document.getElementById('exportBackup').onclick=exportBackup;
   document.getElementById('importBackup').onclick=()=>{modal.close();importInput.click();};
 }
-function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Dienst-Sicherung-${localDateKey(new Date())}.json`;a.click();URL.revokeObjectURL(a.href);modal.close();}
-async function importBackup(event){const file=event.target.files[0];event.target.value='';if(!file)return;try{const parsed=JSON.parse(await file.text());if(!parsed||!Array.isArray(parsed.duties))throw new Error();if(confirm('Vorhandene Daten durch diese Sicherung ersetzen?')){state.duties=parsed.duties;saveState();render();}}catch{alert('Die Sicherungsdatei ist ungültig.');}}
+function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Dienst-Sicherung-${localDateKey(new Date())}.json`;a.click();URL.revokeObjectURL(a.href);localStorage.setItem(BACKUP_DATE_KEY,new Date().toISOString());showBackupReminder();modal.close();}
+async function importBackup(event){const file=event.target.files[0];event.target.value='';if(!file)return;try{const parsed=JSON.parse(await file.text());if(!isValidBackup(parsed))throw new Error();const dutyCount=parsed.duties.length;const entryCount=parsed.duties.reduce((n,d)=>n+d.entries.length,0);if(confirm(`Die Sicherung enthält ${dutyCount} Dienste und ${entryCount} Einsätze. Vorhandene Daten wirklich ersetzen?`)){state.duties=parsed.duties;saveState();localStorage.setItem(BACKUP_DATE_KEY,new Date().toISOString());showBackupReminder();render();}}catch{alert('Die Sicherungsdatei ist ungültig oder beschädigt. Es wurden keine Daten verändert.');}}
 
-if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js'));
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    const registration = await navigator.serviceWorker.register('./service-worker.js');
+    if (registration.waiting) showUpdate(registration.waiting);
+    registration.addEventListener('updatefound', () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+      });
+    });
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
+  });
+}
+showBackupReminder();
 render();

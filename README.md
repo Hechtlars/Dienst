@@ -36,3 +36,11 @@ Daten aus der bisherigen nativen iPhone-App werden nicht automatisch übernommen
 ## Änderung: aufgerundete Dienststunden
 
 In der Detailansicht eines Dienstes werden die Minuten für Telefonisch und Im Haus jeweils separat auf die nächste volle Stunde aufgerundet. Die beiden aufgerundeten Stundenwerte werden zusätzlich zu einer Gesamtsumme addiert.
+
+
+## Version 3
+
+- Hinweis bei verfügbarer neuer Version mit Schaltfläche „Aktualisieren“
+- Erinnerung an eine Datensicherung nach 30 Tagen
+- Prüfung von Sicherungsdateien vor dem Import
+- Verbesserte Darstellung und größere Bedienflächen auf kleinen iPhones
