@@ -1,46 +1,24 @@
-# Dienst – Web-App
+# Dienst – Web-App Version 4
 
-Diese Version läuft als installierbare Web-App auf dem iPhone und benötigt weder Xcode noch ein Apple-Developer-Abo.
+Installierbare, offlinefähige Web-App für Bereitschaftsdienste von 08:00 Uhr bis 08:00 Uhr am Folgetag.
+
+## Datenschutz und Speicherung
+
+Alle Dienste und Einsätze werden ausschließlich lokal im Browser-Speicher des jeweiligen Geräts gespeichert. Es gibt keine Cloud-Synchronisierung, kein Benutzerkonto und keine Übertragung persönlicher Daten an GitHub. GitHub Pages liefert nur die Programmdateien aus.
 
 ## Funktionen
 
-- Dienst immer vom gewählten Datum 08:00 Uhr bis zum Folgetag 08:00 Uhr
+- Dienste immer von 08:00 Uhr bis 08:00 Uhr am Folgetag
 - Einsätze „Telefonisch“ und „Im Haus“
-- automatische Berechnung der Einsatzminuten
-- Statistik je Dienst
-- Monatsübersicht mit Datum, Anfangszeit, Endzeit und Minuten
-- lokale Speicherung auf dem Gerät
-- Offline-Nutzung nach dem ersten Laden
-- Export und Import einer JSON-Datensicherung über das Drei-Punkte-Menü
+- Startzeit, Endzeit und Minuten pro Einsatz
+- getrennte, auf volle Stunden aufgerundete Auswertung pro Dienstart und Dienst
+- Monatsstatistik mit gerundeten Stunden und Gesamtsumme
+- CSV-Export des gewählten Monats
+- druckbarer Monatsbericht, der auf dem iPhone als PDF gesichert werden kann
+- lokale JSON-Datensicherung und Wiederherstellung
+- Offline-Nutzung und Update-Hinweis
+- iPhone-ähnliche Oberfläche mit Karten, Bottom-Tabbar und modalen Sheets
 
-## Kostenlos veröffentlichen
+## Update bei GitHub Pages
 
-Die Dateien müssen über HTTPS bereitgestellt werden, damit Installation und Offline-Modus funktionieren. Am einfachsten ist ein kostenloser statischer Webhoster, z. B. GitHub Pages, Netlify oder Cloudflare Pages.
-
-### Beispiel mit Netlify Drop
-
-1. Den Ordner `Dienst-Web-App` entpacken.
-2. Im Browser Netlify Drop öffnen.
-3. Den kompletten Ordner auf die Seite ziehen.
-4. Die erzeugte HTTPS-Adresse auf dem iPhone in Safari öffnen.
-5. In Safari auf **Teilen** tippen.
-6. **Zum Home-Bildschirm** wählen und **Hinzufügen** antippen.
-
-## Wichtig zur Speicherung
-
-Die Daten liegen lokal im Browser dieses iPhones. Sie bleiben beim normalen Schließen und Neustarten erhalten. Sie können jedoch verloren gehen, wenn die Web-App gelöscht, Safari-Websitedaten gelöscht oder das iPhone zurückgesetzt wird. Deshalb regelmäßig über **••• → Sicherung exportieren** eine Sicherungsdatei speichern.
-
-Daten aus der bisherigen nativen iPhone-App werden nicht automatisch übernommen.
-
-
-## Änderung: aufgerundete Dienststunden
-
-In der Detailansicht eines Dienstes werden die Minuten für Telefonisch und Im Haus jeweils separat auf die nächste volle Stunde aufgerundet. Die beiden aufgerundeten Stundenwerte werden zusätzlich zu einer Gesamtsumme addiert.
-
-
-## Version 3
-
-- Hinweis bei verfügbarer neuer Version mit Schaltfläche „Aktualisieren“
-- Erinnerung an eine Datensicherung nach 30 Tagen
-- Prüfung von Sicherungsdateien vor dem Import
-- Verbesserte Darstellung und größere Bedienflächen auf kleinen iPhones
+Den Inhalt dieses Ordners über **Add file → Upload files** in das bestehende Repository hochladen und vorhandene Dateien ersetzen. Danach **Commit changes** wählen. Persönliche Einträge bleiben auf dem Gerät erhalten, solange dieselbe GitHub-Pages-Adresse verwendet und die Websitedaten nicht gelöscht werden.

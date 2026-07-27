@@ -6,9 +6,11 @@ const BACKUP_REMINDER_DAYS = 30;
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
+let selectedDutyId = null;
 
 const main = document.getElementById('mainContent');
 const title = document.getElementById('pageTitle');
+const subtitle = document.getElementById('pageSubtitle');
 const modal = document.getElementById('modal');
 const modalContent = document.getElementById('modalContent');
 const importInput = document.getElementById('importInput');
@@ -17,14 +19,15 @@ const updateButton = document.getElementById('updateButton');
 const backupReminder = document.getElementById('backupReminder');
 const backupReminderButton = document.getElementById('backupReminderButton');
 
-document.querySelectorAll('.tab').forEach(button => {
+for (const button of document.querySelectorAll('.tab')) {
   button.addEventListener('click', () => {
     currentView = button.dataset.view;
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === button));
+    selectedDutyId = null;
+    for (const tab of document.querySelectorAll('.tab')) tab.classList.toggle('active', tab === button);
     render();
   });
-});
-document.getElementById('backupButton').addEventListener('click', openBackupMenu);
+}
+document.getElementById('menuButton').addEventListener('click', openMenu);
 importInput.addEventListener('change', importBackup);
 updateButton.addEventListener('click', applyUpdate);
 backupReminderButton.addEventListener('click', openBackupMenu);
@@ -33,27 +36,57 @@ function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
     return parsed && Array.isArray(parsed.duties) ? parsed : { duties: [] };
-  } catch { return { duties: [] }; }
+  } catch {
+    return { duties: [] };
+  }
 }
-function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showBackupReminder(); }
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  showBackupReminder();
+}
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }
 function pad(n) { return String(n).padStart(2, '0'); }
-function localDateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`; }
-function parseLocalDate(key) { const [y,m,d] = key.split('-').map(Number); return new Date(y,m-1,d); }
-function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
-function dutyStart(duty) { const d = parseLocalDate(duty.date); d.setHours(8,0,0,0); return d; }
-function dutyEnd(duty) { const d = parseLocalDate(duty.date); d.setDate(d.getDate()+1); d.setHours(8,0,0,0); return d; }
-function fmtDate(d) { return new Intl.DateTimeFormat('de-DE', {day:'numeric', month:'long', year:'numeric'}).format(d); }
-function fmtShortDate(d) { return new Intl.DateTimeFormat('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'}).format(d); }
-function fmtTime(d) { return new Intl.DateTimeFormat('de-DE', {hour:'2-digit', minute:'2-digit'}).format(d); }
-function fmtMonth(d) { return new Intl.DateTimeFormat('de-DE', {month:'long', year:'numeric'}).format(d); }
-function minutes(entry) { return Math.max(0, Math.floor((new Date(entry.end)-new Date(entry.start))/60000)); }
-function sum(duty, type) { return duty.entries.filter(e=>e.type===type).reduce((a,e)=>a+minutes(e),0); }
+function localDateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
+function parseLocalDate(key) { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); }
+function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
+function dutyStart(duty) { const date = parseLocalDate(duty.date); date.setHours(8, 0, 0, 0); return date; }
+function dutyEnd(duty) { const date = parseLocalDate(duty.date); date.setDate(date.getDate() + 1); date.setHours(8, 0, 0, 0); return date; }
+function fmtDate(date) { return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }).format(date); }
+function fmtShortDate(date) { return new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date); }
+function fmtTime(date) { return new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(date); }
+function fmtMonth(date) { return new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(date); }
+function minutes(entry) { return Math.max(0, Math.round((new Date(entry.end) - new Date(entry.start)) / 60000)); }
+function sum(duty, type) { return duty.entries.filter(entry => entry.type === type).reduce((total, entry) => total + minutes(entry), 0); }
 function roundedHours(minuteCount) { return Math.ceil(minuteCount / 60); }
 function hourLabel(value) { return `${value} ${value === 1 ? 'Stunde' : 'Stunden'}`; }
-function sortedDuties() { return [...state.duties].sort((a,b)=>dutyStart(b)-dutyStart(a)); }
-function activeDuty() { const now = new Date(); return sortedDuties().find(d=>dutyStart(d)<=now && now<dutyEnd(d)); }
-function escapeHtml(s) { return String(s).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function sortedDuties() { return [...state.duties].sort((a, b) => dutyStart(b) - dutyStart(a)); }
+function activeDuty() { const now = new Date(); return sortedDuties().find(duty => dutyStart(duty) <= now && now < dutyEnd(duty)); }
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
+function monthDuties() {
+  return sortedDuties().filter(duty => {
+    const date = dutyStart(duty);
+    return date.getFullYear() === selectedMonth.getFullYear() && date.getMonth() === selectedMonth.getMonth();
+  });
+}
+function monthTotals(duties) {
+  return duties.reduce((totals, duty) => {
+    totals.phoneMinutes += sum(duty, 'Telefonisch');
+    totals.houseMinutes += sum(duty, 'Im Haus');
+    totals.phoneHours += roundedHours(sum(duty, 'Telefonisch'));
+    totals.houseHours += roundedHours(sum(duty, 'Im Haus'));
+    return totals;
+  }, { phoneMinutes: 0, houseMinutes: 0, phoneHours: 0, houseHours: 0 });
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function isValidBackup(data) {
   if (!data || !Array.isArray(data.duties)) return false;
@@ -61,174 +94,362 @@ function isValidBackup(data) {
     if (!duty || typeof duty.id !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(duty.date) || !Array.isArray(duty.entries)) return false;
     return duty.entries.every(entry => {
       if (!entry || typeof entry.id !== 'string' || !['Telefonisch', 'Im Haus'].includes(entry.type)) return false;
-      const start = new Date(entry.start), end = new Date(entry.end);
+      const start = new Date(entry.start);
+      const end = new Date(entry.end);
       return Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && end > start;
     });
   });
 }
-
 function daysSince(dateString) {
   if (!dateString) return Infinity;
   const date = new Date(dateString);
   return Number.isFinite(date.getTime()) ? Math.floor((Date.now() - date.getTime()) / 86400000) : Infinity;
 }
-
 function showBackupReminder() {
-  const hasData = state.duties.some(d => d.entries.length > 0);
+  const hasData = state.duties.some(duty => duty.entries.length > 0);
   const overdue = daysSince(localStorage.getItem(BACKUP_DATE_KEY)) >= BACKUP_REMINDER_DAYS;
   backupReminder.hidden = !(hasData && overdue);
 }
 
 let waitingWorker = null;
-function showUpdate(worker) {
-  waitingWorker = worker;
-  updateBanner.hidden = false;
-}
+function showUpdate(worker) { waitingWorker = worker; updateBanner.hidden = false; }
 function applyUpdate() {
   if (waitingWorker) waitingWorker.postMessage({ type: 'SKIP_WAITING' });
   else window.location.reload();
 }
 
-
 function render() {
-  if (currentView === 'dienst') renderDuty(); else renderMonth();
+  if (currentView === 'dienst') renderDuty();
+  else if (selectedDutyId) renderDutyDetail(selectedDutyId);
+  else renderMonth();
 }
 
 function renderDuty() {
   title.textContent = 'Dienst';
+  subtitle.textContent = 'Bereitschaft erfassen';
   const duty = activeDuty();
   if (!duty) {
-    main.innerHTML = `<div class="empty">Aktuell läuft kein Dienst.</div><button class="primary" id="newDuty">Neuen Dienst anlegen</button>`;
+    main.innerHTML = `
+      <section class="empty-card">
+        <div class="empty-icon">🚑</div>
+        <div class="empty-title">Kein aktiver Dienst</div>
+        <div class="empty-text">Lege einen Dienst an. Er läuft automatisch vom gewählten Datum um 08:00 Uhr bis 08:00 Uhr am Folgetag.</div>
+      </section>
+      <button class="primary" id="newDuty" type="button">Neuen Dienst anlegen</button>
+      ${privacyNote()}`;
     document.getElementById('newDuty').onclick = openNewDuty;
     return;
   }
-  const entries = [...duty.entries].sort((a,b)=>new Date(a.start)-new Date(b.start));
+  const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
+  const phoneMinutes = sum(duty, 'Telefonisch');
+  const houseMinutes = sum(duty, 'Im Haus');
   main.innerHTML = `
     <section class="card hero">
+      <div class="hero-kicker">Aktueller Bereitschaftsdienst</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
       <div class="hero-time">08:00 Uhr – 08:00 Uhr am Folgetag</div>
     </section>
     <section class="stats">
-      <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${sum(duty,'Telefonisch')} Min.</div></div>
-      <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${sum(duty,'Im Haus')} Min.</div></div>
+      <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
+      <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(houseMinutes))} gerundet</div></div>
     </section>
-    <button class="primary" id="newEntry">+ Einsatz hinzufügen</button>
+    <button class="primary" id="newEntry" type="button">+ Einsatz hinzufügen</button>
     <div class="card-header">Einsätze</div>
-    <section class="card">${entries.length ? entries.map(e=>entryRow(duty,e,true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>`;
-  document.getElementById('newEntry').onclick = ()=>openNewEntry(duty.id);
+    <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
+    ${privacyNote()}`;
+  document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   bindDeletes();
 }
 
 function renderMonth() {
   title.textContent = 'Monat';
-  const duties = sortedDuties().filter(d=>{
-    const x=dutyStart(d); return x.getFullYear()===selectedMonth.getFullYear() && x.getMonth()===selectedMonth.getMonth();
-  });
+  subtitle.textContent = 'Auswertung und Export';
+  const duties = monthDuties();
+  const totals = monthTotals(duties);
+  const totalHours = totals.phoneHours + totals.houseHours;
   main.innerHTML = `
-    <div class="month-controls"><button id="prevMonth">‹</button><div class="month-title">${fmtMonth(selectedMonth)}</div><button id="nextMonth">›</button></div>
-    <section class="card">${duties.length ? duties.map(d=>`
-      <div class="row duty-row" data-duty="${d.id}">
-        <div class="row-main"><div class="row-title">${fmtDate(dutyStart(d))}</div><div class="row-subtitle">Telefonisch: ${sum(d,'Telefonisch')} Min. · Im Haus: ${sum(d,'Im Haus')} Min.</div></div><span class="chevron">›</span>
-      </div>`).join('') : '<div class="empty">Keine Dienste in diesem Monat</div>'}</section>`;
-  document.getElementById('prevMonth').onclick=()=>{selectedMonth=new Date(selectedMonth.getFullYear(),selectedMonth.getMonth()-1,1);renderMonth();};
-  document.getElementById('nextMonth').onclick=()=>{selectedMonth=new Date(selectedMonth.getFullYear(),selectedMonth.getMonth()+1,1);renderMonth();};
-  document.querySelectorAll('.duty-row').forEach(row=>row.onclick=()=>renderDutyDetail(row.dataset.duty));
+    <div class="month-controls">
+      <button id="prevMonth" type="button" aria-label="Vorheriger Monat">‹</button>
+      <div class="month-title">${fmtMonth(selectedMonth)}</div>
+      <button id="nextMonth" type="button" aria-label="Nächster Monat">›</button>
+    </div>
+    <section class="month-summary">
+      <div class="month-stat"><div class="month-stat-label">Telefonisch</div><div class="month-stat-value">${totals.phoneHours} Std.</div></div>
+      <div class="month-stat"><div class="month-stat-label">Im Haus</div><div class="month-stat-value">${totals.houseHours} Std.</div></div>
+      <div class="month-stat"><div class="month-stat-label">Gesamt</div><div class="month-stat-value">${totalHours} Std.</div></div>
+    </section>
+    <div class="month-actions">
+      <button class="action-button" id="exportCsv" type="button">CSV exportieren</button>
+      <button class="action-button" id="printReport" type="button">PDF-Bericht</button>
+    </div>
+    <div class="card-header">Dienste</div>
+    <section class="card">${duties.length ? duties.map(duty => {
+      const phone = sum(duty, 'Telefonisch');
+      const house = sum(duty, 'Im Haus');
+      return `<div class="row duty-row" data-duty="${duty.id}">
+        <div class="row-main">
+          <div class="row-title">${fmtDate(dutyStart(duty))}</div>
+          <div class="row-subtitle">Telefonisch: ${phone} Min. (${roundedHours(phone)} Std.) · Im Haus: ${house} Min. (${roundedHours(house)} Std.)</div>
+        </div><span class="chevron">›</span>
+      </div>`;
+    }).join('') : '<div class="empty">Keine Dienste in diesem Monat</div>'}</section>
+    ${privacyNote()}`;
+  document.getElementById('prevMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1); renderMonth(); };
+  document.getElementById('nextMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1); renderMonth(); };
+  document.getElementById('exportCsv').onclick = exportMonthCsv;
+  document.getElementById('printReport').onclick = printMonthReport;
+  for (const row of document.querySelectorAll('.duty-row')) row.onclick = () => { selectedDutyId = row.dataset.duty; renderDutyDetail(selectedDutyId); };
 }
 
 function renderDutyDetail(id) {
-  const duty=state.duties.find(d=>d.id===id); if(!duty) return;
-  title.textContent=fmtShortDate(dutyStart(duty));
-  const entries=[...duty.entries].sort((a,b)=>new Date(a.start)-new Date(b.start));
-  const phoneMinutes=sum(duty,'Telefonisch');
-  const houseMinutes=sum(duty,'Im Haus');
-  const phoneHours=roundedHours(phoneMinutes);
-  const houseHours=roundedHours(houseMinutes);
-  const totalHours=phoneHours+houseHours;
-  main.innerHTML=`
-    <button class="secondary-button" id="backMonth">‹ Zurück zum Monat</button>
+  const duty = state.duties.find(item => item.id === id);
+  if (!duty) { selectedDutyId = null; renderMonth(); return; }
+  title.textContent = fmtShortDate(dutyStart(duty));
+  subtitle.textContent = 'Dienstübersicht';
+  const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
+  const phoneMinutes = sum(duty, 'Telefonisch');
+  const houseMinutes = sum(duty, 'Im Haus');
+  const phoneHours = roundedHours(phoneMinutes);
+  const houseHours = roundedHours(houseMinutes);
+  const totalHours = phoneHours + houseHours;
+  main.innerHTML = `
+    <button class="text-button" id="backMonth" type="button">‹ Zurück zum Monat</button>
+    <section class="card hero">
+      <div class="hero-kicker">Bereitschaftsdienst</div>
+      <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
+      <div class="hero-time">08:00 Uhr – 08:00 Uhr am Folgetag</div>
+    </section>
     <div class="card-header">Statistik</div>
     <section class="card">
-      <div class="row"><div class="row-main"><div class="row-title">Telefonisch</div><div class="row-subtitle">${phoneMinutes} Min. · auf volle Stunden gerundet</div></div><div class="row-value strong-value">${hourLabel(phoneHours)}</div></div>
-      <div class="row"><div class="row-main"><div class="row-title">Im Haus</div><div class="row-subtitle">${houseMinutes} Min. · auf volle Stunden gerundet</div></div><div class="row-value strong-value">${hourLabel(houseHours)}</div></div>
-      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamt</div><div class="row-subtitle">Summe der beiden aufgerundeten Werte</div></div><div class="row-value total-value">${hourLabel(totalHours)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Telefonisch</div><div class="row-subtitle">${phoneMinutes} Minuten · separat aufgerundet</div></div><div class="row-value strong-value">${hourLabel(phoneHours)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Im Haus</div><div class="row-subtitle">${houseMinutes} Minuten · separat aufgerundet</div></div><div class="row-value strong-value">${hourLabel(houseHours)}</div></div>
+      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamt</div><div class="row-subtitle">Summe der beiden gerundeten Werte</div></div><div class="row-value total-value">${hourLabel(totalHours)}</div></div>
     </section>
     <div class="card-header">Einsätze</div>
-    <section class="card">${entries.length ? entries.map(e=>entryRow(duty,e,true)).join('') : '<div class="empty">Keine Einsätze</div>'}</section>
-    <button class="secondary-button danger-button" id="deleteDuty">Dienst löschen</button>`;
-  document.getElementById('backMonth').onclick=renderMonth;
-  document.getElementById('deleteDuty').onclick=()=>{ if(confirm('Diesen Dienst mit allen Einsätzen löschen?')) { state.duties=state.duties.filter(d=>d.id!==id);saveState();renderMonth(); } };
+    <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Keine Einsätze</div>'}</section>
+    <button class="secondary-button danger-button" id="deleteDuty" type="button">Dienst löschen</button>`;
+  document.getElementById('backMonth').onclick = () => { selectedDutyId = null; renderMonth(); };
+  document.getElementById('deleteDuty').onclick = () => {
+    if (confirm('Diesen Dienst mit allen Einsätzen löschen?')) {
+      state.duties = state.duties.filter(item => item.id !== id);
+      saveState();
+      selectedDutyId = null;
+      renderMonth();
+    }
+  };
   bindDeletes();
 }
 
-function entryRow(duty,e,withDelete) {
-  const s=new Date(e.start), end=new Date(e.end);
-  return `<div class="row"><div class="row-main"><div class="row-title">${escapeHtml(e.type)}</div><div class="row-subtitle">${fmtDate(s)} von ${fmtTime(s)} bis ${fmtTime(end)}</div></div><div class="row-value">${minutes(e)} Min.</div>${withDelete?`<button class="delete" data-duty="${duty.id}" data-entry="${e.id}">Löschen</button>`:''}</div>`;
+function entryRow(duty, entry, withDelete) {
+  const start = new Date(entry.start);
+  const end = new Date(entry.end);
+  const badgeClass = entry.type === 'Telefonisch' ? 'type-phone' : 'type-house';
+  const endDateText = localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`;
+  return `<div class="row">
+    <div class="row-main">
+      <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
+      <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
+    </div>
+    <div class="row-value">${minutes(entry)} Min.</div>
+    ${withDelete ? `<button class="delete" type="button" data-duty="${duty.id}" data-entry="${entry.id}">Löschen</button>` : ''}
+  </div>`;
 }
-function bindDeletes(){document.querySelectorAll('.delete').forEach(b=>b.onclick=()=>{if(confirm('Einsatz löschen?')){const d=state.duties.find(x=>x.id===b.dataset.duty);d.entries=d.entries.filter(e=>e.id!==b.dataset.entry);saveState();render();}});}
+function bindDeletes() {
+  for (const button of document.querySelectorAll('.delete')) {
+    button.onclick = () => {
+      if (!confirm('Einsatz löschen?')) return;
+      const duty = state.duties.find(item => item.id === button.dataset.duty);
+      if (!duty) return;
+      duty.entries = duty.entries.filter(entry => entry.id !== button.dataset.entry);
+      saveState();
+      render();
+    };
+  }
+}
 
 function openNewDuty() {
-  const now=new Date();
-  modalContent.innerHTML=`<div class="modal-body"><div class="modal-title">Neuer Dienst</div><label class="field"><span>Datum</span><input id="dutyDate" type="date" value="${localDateKey(now)}"></label><div id="modalError" class="error"></div><div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div></div>`;
+  const now = new Date();
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Neuer Dienst</div>
+    <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${localDateKey(now)}"></label>
+    <div class="small-note">Der Dienst beginnt automatisch um 08:00 Uhr und endet am Folgetag um 08:00 Uhr.</div>
+    <div id="modalError" class="error"></div>
+    <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
+  </div>`;
   modal.showModal();
-  document.getElementById('saveDuty').onclick=()=>{
-    const date=document.getElementById('dutyDate').value;
-    if(!date) return;
-    if(state.duties.some(d=>d.date===date)){document.getElementById('modalError').textContent='Für dieses Datum gibt es bereits einen Dienst.';return;}
-    state.duties.push({id:uid(),date,entries:[]});saveState();modal.close();render();
+  document.getElementById('saveDuty').onclick = () => {
+    const date = document.getElementById('dutyDate').value;
+    if (!date) return;
+    if (state.duties.some(duty => duty.date === date)) {
+      document.getElementById('modalError').textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
+      return;
+    }
+    state.duties.push({ id: uid(), date, entries: [] });
+    saveState();
+    modal.close();
+    render();
   };
 }
 
 function openNewEntry(dutyId) {
-  const duty=state.duties.find(d=>d.id===dutyId); if(!duty) return;
-  let type='Telefonisch';
-  const start=dutyStart(duty); const today=new Date(); const defaultDate=(today>=start&&today<dutyEnd(duty))?today:start; const defaultEnd=new Date(defaultDate.getTime()+15*60000);
-  modalContent.innerHTML=`<div class="modal-body"><div class="modal-title">Neuer Einsatz</div>
+  const duty = state.duties.find(item => item.id === dutyId);
+  if (!duty) return;
+  let type = 'Telefonisch';
+  const start = dutyStart(duty);
+  const now = new Date();
+  const defaultDate = now >= start && now < dutyEnd(duty) ? now : start;
+  const defaultEnd = new Date(defaultDate.getTime() + 15 * 60000);
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Neuer Einsatz</div>
     <div class="segment"><button type="button" class="selected" data-type="Telefonisch">Telefonisch</button><button type="button" data-type="Im Haus">Im Haus</button></div>
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
-    <div id="modalError" class="error"></div><div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div></div>`;
+    <div id="modalError" class="error"></div>
+    <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div>
+  </div>`;
   modal.showModal();
-  modalContent.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{type=b.dataset.type;modalContent.querySelectorAll('[data-type]').forEach(x=>x.classList.toggle('selected',x===b));});
-  document.getElementById('saveEntry').onclick=()=>{
-    const date=document.getElementById('entryDate').value, st=document.getElementById('entryStart').value, et=document.getElementById('entryEnd').value;
-    const err=document.getElementById('modalError'); err.textContent='';
-    if(!date||!st||!et){err.textContent='Bitte alle Felder ausfüllen.';return;}
-    const startDate=new Date(`${date}T${st}:00`); let endDate=new Date(`${date}T${et}:00`);
-    if(endDate<=startDate) endDate.setDate(endDate.getDate()+1);
-    if(startDate<dutyStart(duty)||startDate>=dutyEnd(duty)){err.textContent='Die Startzeit muss innerhalb dieses Dienstes liegen.';return;}
-    if(endDate>dutyEnd(duty)){err.textContent='Die Endzeit darf nicht nach dem Dienstende um 08:00 Uhr liegen.';return;}
-    duty.entries.push({id:uid(),type,start:startDate.toISOString(),end:endDate.toISOString()});saveState();modal.close();render();
+  for (const button of modalContent.querySelectorAll('[data-type]')) {
+    button.onclick = () => {
+      type = button.dataset.type;
+      for (const item of modalContent.querySelectorAll('[data-type]')) item.classList.toggle('selected', item === button);
+    };
+  }
+  document.getElementById('saveEntry').onclick = () => {
+    const date = document.getElementById('entryDate').value;
+    const startTime = document.getElementById('entryStart').value;
+    const endTime = document.getElementById('entryEnd').value;
+    const error = document.getElementById('modalError');
+    error.textContent = '';
+    if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
+    const startDate = new Date(`${date}T${startTime}:00`);
+    const endDate = new Date(`${date}T${endTime}:00`);
+    if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
+    if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
+    if (endDate > dutyEnd(duty)) { error.textContent = 'Die Endzeit darf nicht nach dem Dienstende um 08:00 Uhr liegen.'; return; }
+    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString() });
+    saveState();
+    modal.close();
+    render();
   };
 }
 
-function openBackupMenu(){
-  modalContent.innerHTML=`<div class="modal-body"><div class="modal-title">Datensicherung</div><button type="button" class="secondary-button" id="exportBackup">Sicherung exportieren</button><button type="button" class="secondary-button" id="importBackup">Sicherung importieren</button><button class="secondary-button">Schließen</button></div>`;
-  modal.showModal();
-  document.getElementById('exportBackup').onclick=exportBackup;
-  document.getElementById('importBackup').onclick=()=>{modal.close();importInput.click();};
+function privacyNote() {
+  return `<div class="privacy-note"><span aria-hidden="true">🔒</span><span>Alle Dienste und Einsätze werden ausschließlich lokal auf diesem Gerät gespeichert. Es findet keine Cloud-Synchronisierung und keine Übertragung an GitHub statt.</span></div>`;
 }
-function exportBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Dienst-Sicherung-${localDateKey(new Date())}.json`;a.click();URL.revokeObjectURL(a.href);localStorage.setItem(BACKUP_DATE_KEY,new Date().toISOString());showBackupReminder();modal.close();}
-async function importBackup(event){const file=event.target.files[0];event.target.value='';if(!file)return;try{const parsed=JSON.parse(await file.text());if(!isValidBackup(parsed))throw new Error();const dutyCount=parsed.duties.length;const entryCount=parsed.duties.reduce((n,d)=>n+d.entries.length,0);if(confirm(`Die Sicherung enthält ${dutyCount} Dienste und ${entryCount} Einsätze. Vorhandene Daten wirklich ersetzen?`)){state.duties=parsed.duties;saveState();localStorage.setItem(BACKUP_DATE_KEY,new Date().toISOString());showBackupReminder();render();}}catch{alert('Die Sicherungsdatei ist ungültig oder beschädigt. Es wurden keine Daten verändert.');}}
+
+function openMenu() {
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Mehr</div>
+    <div class="modal-section-title">Lokale Daten</div>
+    <button type="button" class="secondary-button" id="openBackup">Datensicherung</button>
+    <div class="modal-section-title">Hinweis</div>
+    <div class="privacy-note"><span aria-hidden="true">🔒</span><span>Die App speichert alle persönlichen Einträge nur im lokalen Browser-Speicher dieses Geräts. GitHub enthält ausschließlich den Programmcode.</span></div>
+    <button class="secondary-button">Schließen</button>
+  </div>`;
+  modal.showModal();
+  document.getElementById('openBackup').onclick = () => { modal.close(); openBackupMenu(); };
+}
+function openBackupMenu() {
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Datensicherung</div>
+    <button type="button" class="secondary-button" id="exportBackup">Sicherung exportieren</button>
+    <button type="button" class="secondary-button" id="importBackup">Sicherung importieren</button>
+    <div class="small-note">Die Sicherungsdatei wird von dir selbst gespeichert. Es erfolgt kein automatischer Cloud-Upload.</div>
+    <button class="secondary-button">Schließen</button>
+  </div>`;
+  modal.showModal();
+  document.getElementById('exportBackup').onclick = exportBackup;
+  document.getElementById('importBackup').onclick = () => { modal.close(); importInput.click(); };
+}
+function exportBackup() {
+  const backup = { version: 4, exportedAt: new Date().toISOString(), duties: state.duties };
+  downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `Dienst-Sicherung-${localDateKey(new Date())}.json`);
+  localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
+  showBackupReminder();
+  modal.close();
+}
+async function importBackup(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const data = Array.isArray(parsed.duties) ? parsed : null;
+    if (!isValidBackup(data)) throw new Error('invalid');
+    const dutyCount = data.duties.length;
+    const entryCount = data.duties.reduce((count, duty) => count + duty.entries.length, 0);
+    if (confirm(`Die Sicherung enthält ${dutyCount} Dienste und ${entryCount} Einsätze. Vorhandene lokale Daten wirklich ersetzen?`)) {
+      state.duties = data.duties;
+      saveState();
+      localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
+      showBackupReminder();
+      render();
+    }
+  } catch {
+    alert('Die Sicherungsdatei ist ungültig oder beschädigt. Es wurden keine Daten verändert.');
+  }
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  return /[;"\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+function exportMonthCsv() {
+  const duties = monthDuties().slice().reverse();
+  if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
+  const rows = [['Dienst', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Gerundete Stunden je Dienstart']];
+  for (const duty of duties) {
+    const rounded = { 'Telefonisch': roundedHours(sum(duty, 'Telefonisch')), 'Im Haus': roundedHours(sum(duty, 'Im Haus')) };
+    if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), '', '', '', '', '0', '0']);
+    for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
+      const start = new Date(entry.start);
+      const end = new Date(entry.end);
+      rows.push([fmtShortDate(dutyStart(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), rounded[entry.type]]);
+    }
+  }
+  const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(';')).join('\r\n');
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `Dienst-${selectedMonth.getFullYear()}-${pad(selectedMonth.getMonth() + 1)}.csv`);
+}
+function printMonthReport() {
+  const duties = monthDuties().slice().reverse();
+  if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
+  const totals = monthTotals(duties);
+  const rows = duties.map(duty => {
+    const phoneMinutes = sum(duty, 'Telefonisch');
+    const houseMinutes = sum(duty, 'Im Haus');
+    return `<tr><td>${fmtDate(dutyStart(duty))}</td><td>${phoneMinutes} Min.</td><td>${roundedHours(phoneMinutes)} Std.</td><td>${houseMinutes} Min.</td><td>${roundedHours(houseMinutes)} Std.</td><td>${roundedHours(phoneMinutes) + roundedHours(houseMinutes)} Std.</td></tr>`;
+  }).join('');
+  const report = window.open('', '_blank');
+  if (!report) { alert('Bitte Pop-ups für den PDF-Bericht erlauben.'); return; }
+  report.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Dienst – ${fmtMonth(selectedMonth)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:36px;color:#111}h1{margin-bottom:4px}p{color:#666;margin-top:0}table{width:100%;border-collapse:collapse;margin-top:24px;font-size:13px}th,td{border-bottom:1px solid #ddd;padding:10px 7px;text-align:left}th{background:#f3f4f6}.summary{display:flex;gap:12px;margin-top:20px}.box{border:1px solid #ddd;border-radius:10px;padding:12px 16px}.box strong{display:block;font-size:22px;margin-top:5px}@media print{body{margin:18mm}}</style></head><body><h1>Dienst – ${fmtMonth(selectedMonth)}</h1><p>Monatsbericht · lokal auf dem Gerät erstellt</p><div class="summary"><div class="box">Telefonisch<strong>${totals.phoneHours} Std.</strong></div><div class="box">Im Haus<strong>${totals.houseHours} Std.</strong></div><div class="box">Gesamt<strong>${totals.phoneHours + totals.houseHours} Std.</strong></div></div><table><thead><tr><th>Dienst</th><th>Telefonisch</th><th>Gerundet</th><th>Im Haus</th><th>Gerundet</th><th>Gesamt</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  report.document.close();
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
-    const registration = await navigator.serviceWorker.register('./service-worker.js');
-    if (registration.waiting) showUpdate(registration.waiting);
-    registration.addEventListener('updatefound', () => {
-      const worker = registration.installing;
-      if (!worker) return;
-      worker.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+    try {
+      const registration = await navigator.serviceWorker.register('./service-worker.js');
+      registration.update();
+      if (registration.waiting) showUpdate(registration.waiting);
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+        });
       });
-    });
-    let reloading = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloading) return;
-      reloading = true;
-      window.location.reload();
-    });
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+    } catch (error) {
+      console.warn('Offline-Modus konnte nicht aktiviert werden.', error);
+    }
   });
 }
+
 showBackupReminder();
 render();
