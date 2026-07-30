@@ -1,24 +1,21 @@
-# Dienst – Web-App Version 4
+# Dienst – Web-App Version 5
 
-Installierbare, offlinefähige Web-App für Bereitschaftsdienste von 08:00 Uhr bis 08:00 Uhr am Folgetag.
+Installierbare, offlinefähige Web-App zur lokalen Erfassung von Bereitschaftsdiensten.
 
-## Datenschutz und Speicherung
+## Dienstzeiten
 
-Alle Dienste und Einsätze werden ausschließlich lokal im Browser-Speicher des jeweiligen Geräts gespeichert. Es gibt keine Cloud-Synchronisierung, kein Benutzerkonto und keine Übertragung persönlicher Daten an GitHub. GitHub Pages liefert nur die Programmdateien aus.
+- Montag bis Donnerstag: 07:15 Uhr bis 07:15 Uhr am Folgetag
+- Freitag: 07:15 Uhr bis 08:30 Uhr am Folgetag
+- Samstag: 08:30 Uhr bis 08:30 Uhr am Folgetag
+- Sonntag: 08:30 Uhr bis 07:15 Uhr am Folgetag
 
-## Funktionen
+## Neu in Version 5
 
-- Dienste immer von 08:00 Uhr bis 08:00 Uhr am Folgetag
-- Einsätze „Telefonisch“ und „Im Haus“
-- Startzeit, Endzeit und Minuten pro Einsatz
-- getrennte, auf volle Stunden aufgerundete Auswertung pro Dienstart und Dienst
-- Monatsstatistik mit gerundeten Stunden und Gesamtsumme
-- CSV-Export des gewählten Monats
-- druckbarer Monatsbericht, der auf dem iPhone als PDF gesichert werden kann
-- lokale JSON-Datensicherung und Wiederherstellung
-- Offline-Nutzung und Update-Hinweis
-- iPhone-ähnliche Oberfläche mit Karten, Bottom-Tabbar und modalen Sheets
+- Erfasste Dienste können nachträglich bearbeitet werden.
+- Beim Erfassen eines Einsatzes kann eine optionale Bemerkung eingetragen werden, zum Beispiel „OP“.
+- Die Bemerkung erscheint in der Einsatzliste und im CSV-Export.
+- Dienstbeginn und Dienstende werden automatisch anhand des Wochentags berechnet.
 
-## Update bei GitHub Pages
+## Datenschutz
 
-Den Inhalt dieses Ordners über **Add file → Upload files** in das bestehende Repository hochladen und vorhandene Dateien ersetzen. Danach **Commit changes** wählen. Persönliche Einträge bleiben auf dem Gerät erhalten, solange dieselbe GitHub-Pages-Adresse verwendet und die Websitedaten nicht gelöscht werden.
+Alle persönlichen Daten werden ausschließlich lokal im Browser-Speicher des jeweiligen Geräts gespeichert. Es gibt keine Cloud-Synchronisierung und keine Übertragung der Einträge an GitHub.

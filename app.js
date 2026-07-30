@@ -49,8 +49,33 @@ function pad(n) { return String(n).padStart(2, '0'); }
 function localDateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
 function parseLocalDate(key) { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); }
 function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
-function dutyStart(duty) { const date = parseLocalDate(duty.date); date.setHours(8, 0, 0, 0); return date; }
-function dutyEnd(duty) { const date = parseLocalDate(duty.date); date.setDate(date.getDate() + 1); date.setHours(8, 0, 0, 0); return date; }
+function dutySchedule(dateKey) {
+  const date = parseLocalDate(dateKey);
+  const weekday = date.getDay();
+  let startHour = 7, startMinute = 15, endHour = 7, endMinute = 15;
+  if (weekday === 5) { endHour = 8; endMinute = 30; }
+  else if (weekday === 6) { startHour = 8; startMinute = 30; endHour = 8; endMinute = 30; }
+  else if (weekday === 0) { startHour = 8; startMinute = 30; }
+  return { startHour, startMinute, endHour, endMinute };
+}
+function dutyStart(duty) {
+  const date = parseLocalDate(duty.date);
+  const schedule = dutySchedule(duty.date);
+  date.setHours(schedule.startHour, schedule.startMinute, 0, 0);
+  return date;
+}
+function dutyEnd(duty) {
+  const date = parseLocalDate(duty.date);
+  const schedule = dutySchedule(duty.date);
+  date.setDate(date.getDate() + 1);
+  date.setHours(schedule.endHour, schedule.endMinute, 0, 0);
+  return date;
+}
+function dutyTimeText(duty) { return `${fmtTime(dutyStart(duty))} Uhr – ${fmtTime(dutyEnd(duty))} Uhr am Folgetag`; }
+function scheduleText(dateKey) {
+  const temp = { date: dateKey };
+  return `${fmtTime(dutyStart(temp))} Uhr bis ${fmtTime(dutyEnd(temp))} Uhr am Folgetag`;
+}
 function fmtDate(date) { return new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }).format(date); }
 function fmtShortDate(date) { return new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date); }
 function fmtTime(date) { return new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(date); }
@@ -93,7 +118,7 @@ function isValidBackup(data) {
   return data.duties.every(duty => {
     if (!duty || typeof duty.id !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(duty.date) || !Array.isArray(duty.entries)) return false;
     return duty.entries.every(entry => {
-      if (!entry || typeof entry.id !== 'string' || !['Telefonisch', 'Im Haus'].includes(entry.type)) return false;
+      if (!entry || typeof entry.id !== 'string' || !['Telefonisch', 'Im Haus'].includes(entry.type) || (entry.note != null && typeof entry.note !== 'string')) return false;
       const start = new Date(entry.start);
       const end = new Date(entry.end);
       return Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && end > start;
@@ -133,7 +158,7 @@ function renderDuty() {
       <section class="empty-card">
         <div class="empty-icon">🚑</div>
         <div class="empty-title">Kein aktiver Dienst</div>
-        <div class="empty-text">Lege einen Dienst an. Er läuft automatisch vom gewählten Datum um 08:00 Uhr bis 08:00 Uhr am Folgetag.</div>
+        <div class="empty-text">Lege einen Dienst an. Die Start- und Endzeit wird automatisch passend zum Wochentag berechnet.</div>
       </section>
       <button class="primary" id="newDuty" type="button">Neuen Dienst anlegen</button>
       ${privacyNote()}`;
@@ -147,8 +172,9 @@ function renderDuty() {
     <section class="card hero">
       <div class="hero-kicker">Aktueller Bereitschaftsdienst</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
-      <div class="hero-time">08:00 Uhr – 08:00 Uhr am Folgetag</div>
+      <div class="hero-time">${dutyTimeText(duty)}</div>
     </section>
+    <button class="action-button duty-edit-button" id="editActiveDuty" type="button">Dienst bearbeiten</button>
     <section class="stats">
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
       <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(houseMinutes))} gerundet</div></div>
@@ -157,6 +183,7 @@ function renderDuty() {
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
     ${privacyNote()}`;
+  document.getElementById('editActiveDuty').onclick = () => openEditDuty(duty.id);
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   bindDeletes();
 }
@@ -189,7 +216,7 @@ function renderMonth() {
       return `<div class="row duty-row" data-duty="${duty.id}">
         <div class="row-main">
           <div class="row-title">${fmtDate(dutyStart(duty))}</div>
-          <div class="row-subtitle">Telefonisch: ${phone} Min. (${roundedHours(phone)} Std.) · Im Haus: ${house} Min. (${roundedHours(house)} Std.)</div>
+          <div class="row-subtitle">${dutyTimeText(duty)} · Telefonisch: ${phone} Min. (${roundedHours(phone)} Std.) · Im Haus: ${house} Min. (${roundedHours(house)} Std.)</div>
         </div><span class="chevron">›</span>
       </div>`;
     }).join('') : '<div class="empty">Keine Dienste in diesem Monat</div>'}</section>
@@ -217,7 +244,7 @@ function renderDutyDetail(id) {
     <section class="card hero">
       <div class="hero-kicker">Bereitschaftsdienst</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
-      <div class="hero-time">08:00 Uhr – 08:00 Uhr am Folgetag</div>
+      <div class="hero-time">${dutyTimeText(duty)}</div>
     </section>
     <div class="card-header">Statistik</div>
     <section class="card">
@@ -227,8 +254,12 @@ function renderDutyDetail(id) {
     </section>
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Keine Einsätze</div>'}</section>
-    <button class="secondary-button danger-button" id="deleteDuty" type="button">Dienst löschen</button>`;
+    <div class="detail-actions">
+      <button class="secondary-button" id="editDuty" type="button">Dienst bearbeiten</button>
+      <button class="secondary-button danger-button" id="deleteDuty" type="button">Dienst löschen</button>
+    </div>`;
   document.getElementById('backMonth').onclick = () => { selectedDutyId = null; renderMonth(); };
+  document.getElementById('editDuty').onclick = () => openEditDuty(id);
   document.getElementById('deleteDuty').onclick = () => {
     if (confirm('Diesen Dienst mit allen Einsätzen löschen?')) {
       state.duties = state.duties.filter(item => item.id !== id);
@@ -249,6 +280,7 @@ function entryRow(duty, entry, withDelete) {
     <div class="row-main">
       <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
       <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
+      ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
     </div>
     <div class="row-value">${minutes(entry)} Min.</div>
     ${withDelete ? `<button class="delete" type="button" data-duty="${duty.id}" data-entry="${entry.id}">Löschen</button>` : ''}
@@ -269,14 +301,18 @@ function bindDeletes() {
 
 function openNewDuty() {
   const now = new Date();
+  const initialDate = localDateKey(now);
   modalContent.innerHTML = `<div class="modal-body">
     <div class="modal-title">Neuer Dienst</div>
-    <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${localDateKey(now)}"></label>
-    <div class="small-note">Der Dienst beginnt automatisch um 08:00 Uhr und endet am Folgetag um 08:00 Uhr.</div>
+    <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${initialDate}"></label>
+    <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(initialDate)}.</div>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  document.getElementById('dutyDate').onchange = event => {
+    if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
+  };
   document.getElementById('saveDuty').onclick = () => {
     const date = document.getElementById('dutyDate').value;
     if (!date) return;
@@ -285,6 +321,58 @@ function openNewDuty() {
       return;
     }
     state.duties.push({ id: uid(), date, entries: [] });
+    saveState();
+    modal.close();
+    render();
+  };
+}
+
+function openEditDuty(dutyId) {
+  const duty = state.duties.find(item => item.id === dutyId);
+  if (!duty) return;
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Dienst bearbeiten</div>
+    <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${duty.date}"></label>
+    <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(duty.date)}.</div>
+    <div class="small-note">Vorhandene Einsätze bleiben erhalten. Beim Speichern wird geprüft, ob sie weiterhin innerhalb des Dienstes liegen.</div>
+    <div id="modalError" class="error"></div>
+    <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
+  </div>`;
+  modal.showModal();
+  document.getElementById('dutyDate').onchange = event => {
+    if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
+  };
+  document.getElementById('saveDuty').onclick = () => {
+    const date = document.getElementById('dutyDate').value;
+    const error = document.getElementById('modalError');
+    error.textContent = '';
+    if (!date) { error.textContent = 'Bitte ein Datum auswählen.'; return; }
+    if (state.duties.some(item => item.id !== dutyId && item.date === date)) {
+      error.textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
+      return;
+    }
+    const previousDate = duty.date;
+    const dayDifference = Math.round((parseLocalDate(date) - parseLocalDate(previousDate)) / 86400000);
+    const previousEntries = duty.entries.map(entry => ({ ...entry }));
+    duty.date = date;
+    duty.entries = duty.entries.map(entry => {
+      const start = new Date(entry.start);
+      const end = new Date(entry.end);
+      start.setDate(start.getDate() + dayDifference);
+      end.setDate(end.getDate() + dayDifference);
+      return { ...entry, start: start.toISOString(), end: end.toISOString() };
+    });
+    const entriesFit = duty.entries.every(entry => {
+      const start = new Date(entry.start);
+      const end = new Date(entry.end);
+      return start >= dutyStart(duty) && start < dutyEnd(duty) && end <= dutyEnd(duty);
+    });
+    if (!entriesFit) {
+      duty.date = previousDate;
+      duty.entries = previousEntries;
+      error.textContent = 'Mindestens ein Einsatz passt zeitlich nicht zur neuen Dienstzeit. Es wurden keine Änderungen gespeichert.';
+      return;
+    }
     saveState();
     modal.close();
     render();
@@ -305,6 +393,7 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
+    <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP"></textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
@@ -319,6 +408,7 @@ function openNewEntry(dutyId) {
     const date = document.getElementById('entryDate').value;
     const startTime = document.getElementById('entryStart').value;
     const endTime = document.getElementById('entryEnd').value;
+    const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError');
     error.textContent = '';
     if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
@@ -326,8 +416,8 @@ function openNewEntry(dutyId) {
     const endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
-    if (endDate > dutyEnd(duty)) { error.textContent = 'Die Endzeit darf nicht nach dem Dienstende um 08:00 Uhr liegen.'; return; }
-    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString() });
+    if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
+    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), note });
     saveState();
     modal.close();
     render();
@@ -363,7 +453,7 @@ function openBackupMenu() {
   document.getElementById('importBackup').onclick = () => { modal.close(); importInput.click(); };
 }
 function exportBackup() {
-  const backup = { version: 4, exportedAt: new Date().toISOString(), duties: state.duties };
+  const backup = { version: 5, exportedAt: new Date().toISOString(), duties: state.duties };
   downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `Dienst-Sicherung-${localDateKey(new Date())}.json`);
   localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
   showBackupReminder();
@@ -398,14 +488,14 @@ function csvEscape(value) {
 function exportMonthCsv() {
   const duties = monthDuties().slice().reverse();
   if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
-  const rows = [['Dienst', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Gerundete Stunden je Dienstart']];
+  const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Bemerkung', 'Gerundete Stunden je Dienstart']];
   for (const duty of duties) {
     const rounded = { 'Telefonisch': roundedHours(sum(duty, 'Telefonisch')), 'Im Haus': roundedHours(sum(duty, 'Im Haus')) };
-    if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), '', '', '', '', '0', '0']);
+    if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '0']);
     for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
       const start = new Date(entry.start);
       const end = new Date(entry.end);
-      rows.push([fmtShortDate(dutyStart(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), rounded[entry.type]]);
+      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.note || '', rounded[entry.type]]);
     }
   }
   const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(';')).join('\r\n');
