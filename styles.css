@@ -192,3 +192,27 @@ textarea { resize: vertical; min-width: 0; }
   .entry-row .row-main { flex-basis: auto; flex: 1 1 auto; }
   .entry-row .row-value { flex: 0 0 auto; }
 }
+
+
+/* Version 6.1: saubere Long-Press-Menüs */
+.swipe-content,
+.swipe-content * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+dialog.action-sheet-open::backdrop {
+  background: rgba(0, 0, 0, .42);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+dialog.action-sheet-open {
+  cursor: default;
+}
+dialog.action-sheet-open #modalContent,
+dialog.action-sheet-open .action-sheet-body,
+dialog.action-sheet-open button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

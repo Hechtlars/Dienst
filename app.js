@@ -328,7 +328,14 @@ function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
     startX = point.clientX; startY = point.clientY; currentX = item.classList.contains('open') ? -92 : 0;
     dragging = true; moved = false; longPressed = false;
     timer = setTimeout(() => {
-      if (!moved && dragging && onLongPress) { longPressed = true; dragging = false; close(); haptic(); onLongPress(); }
+      if (!moved && dragging && onLongPress) {
+        // Das Menü erst nach dem Loslassen öffnen. So liegt der Finger nicht bereits
+        // auf „Bearbeiten“ und iOS startet keine Textauswahl im neuen Dialog.
+        longPressed = true;
+        dragging = false;
+        close();
+        haptic();
+      }
     }, 550);
   };
   const move = event => {
@@ -343,6 +350,11 @@ function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
   };
   const end = event => {
     clearTimeout(timer);
+    if (longPressed) {
+      // Erst jetzt – nach touchend/pointerup – wird das Kontextmenü angezeigt.
+      setTimeout(() => onLongPress && onLongPress(), 0);
+      return;
+    }
     if (!dragging) return;
     dragging = false;
     const point = event.changedTouches ? event.changedTouches[0] : event;
@@ -362,6 +374,8 @@ function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
     onOpen();
   });
   content.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(); } });
+  content.addEventListener('contextmenu', event => event.preventDefault());
+  content.addEventListener('selectstart', event => event.preventDefault());
   if (deleteButton) deleteButton.onclick = event => { event.stopPropagation(); onDelete(); };
 }
 function bindInteractiveDuties() {
@@ -383,6 +397,7 @@ function bindInteractiveEntries() {
   }
 }
 function openDutyContextMenu(dutyId) {
+  modal.classList.add('action-sheet-open');
   modalContent.innerHTML = `<div class="modal-body action-sheet-body">
     <div class="modal-title">Dienst</div>
     <button type="button" class="secondary-button" id="contextEditDuty">Dienst bearbeiten</button>
@@ -394,6 +409,7 @@ function openDutyContextMenu(dutyId) {
   document.getElementById('contextDeleteDuty').onclick = () => { modal.close(); deleteDutyById(dutyId); };
 }
 function openEntryContextMenu(dutyId, entryId) {
+  modal.classList.add('action-sheet-open');
   modalContent.innerHTML = `<div class="modal-body action-sheet-body">
     <div class="modal-title">Einsatz</div>
     <button type="button" class="secondary-button" id="contextEditEntry">Einsatz bearbeiten</button>
@@ -686,3 +702,14 @@ if ('serviceWorker' in navigator) {
 
 showBackupReminder();
 render();
+
+
+// Version 6.1: Aktion-Menüs durch Tippen auf den abgedunkelten Hintergrund schließen.
+modal.addEventListener('click', event => {
+  if (event.target === modal && modal.classList.contains('action-sheet-open')) {
+    modal.close();
+  }
+});
+modal.addEventListener('close', () => {
+  modal.classList.remove('action-sheet-open');
+});
