@@ -3,6 +3,7 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
+const APP_VERSION = 6;
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -18,6 +19,13 @@ const updateBanner = document.getElementById('updateBanner');
 const updateButton = document.getElementById('updateButton');
 const backupReminder = document.getElementById('backupReminder');
 const backupReminderButton = document.getElementById('backupReminderButton');
+
+const nativeShowModal = modal.showModal.bind(modal);
+modal.showModal = () => {
+  document.body.classList.add('modal-open');
+  nativeShowModal();
+};
+modal.addEventListener('close', () => document.body.classList.remove('modal-open'));
 
 for (const button of document.querySelectorAll('.tab')) {
   button.addEventListener('click', () => {
@@ -185,7 +193,7 @@ function renderDuty() {
     ${privacyNote()}`;
   document.getElementById('editActiveDuty').onclick = () => openEditDuty(duty.id);
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
-  bindDeletes();
+  bindInteractiveEntries();
 }
 
 function renderMonth() {
@@ -210,22 +218,27 @@ function renderMonth() {
       <button class="action-button" id="printReport" type="button">PDF-Bericht</button>
     </div>
     <div class="card-header">Dienste</div>
-    <section class="card">${duties.length ? duties.map(duty => {
+    <section class="swipe-list">${duties.length ? duties.map(duty => {
       const phone = sum(duty, 'Telefonisch');
       const house = sum(duty, 'Im Haus');
-      return `<div class="row duty-row" data-duty="${duty.id}">
-        <div class="row-main">
-          <div class="row-title">${fmtDate(dutyStart(duty))}</div>
-          <div class="row-subtitle">${dutyTimeText(duty)} · Telefonisch: ${phone} Min. (${roundedHours(phone)} Std.) · Im Haus: ${house} Min. (${roundedHours(house)} Std.)</div>
-        </div><span class="chevron">›</span>
+      const count = duty.entries.length;
+      return `<div class="swipe-item" data-kind="duty" data-duty="${duty.id}">
+        <button class="swipe-delete-action" type="button" aria-label="Dienst löschen">Löschen</button>
+        <div class="swipe-content duty-row" role="button" tabindex="0">
+          <div class="row-main">
+            <div class="row-title">${fmtDate(dutyStart(duty))}</div>
+            <div class="row-subtitle">${dutyTimeText(duty)}</div>
+            <div class="duty-summary">${count} ${count === 1 ? 'Einsatz' : 'Einsätze'} · Telefonisch: ${phone} Min. · Im Haus: ${house} Min.</div>
+          </div><span class="chevron">›</span>
+        </div>
       </div>`;
-    }).join('') : '<div class="empty">Keine Dienste in diesem Monat</div>'}</section>
+    }).join('') : '<div class="card empty">Keine Dienste in diesem Monat</div>'}</section>
     ${privacyNote()}`;
   document.getElementById('prevMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() - 1, 1); renderMonth(); };
   document.getElementById('nextMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1); renderMonth(); };
   document.getElementById('exportCsv').onclick = exportMonthCsv;
   document.getElementById('printReport').onclick = printMonthReport;
-  for (const row of document.querySelectorAll('.duty-row')) row.onclick = () => { selectedDutyId = row.dataset.duty; renderDutyDetail(selectedDutyId); };
+  bindInteractiveDuties();
 }
 
 function renderDutyDetail(id) {
@@ -260,15 +273,8 @@ function renderDutyDetail(id) {
     </div>`;
   document.getElementById('backMonth').onclick = () => { selectedDutyId = null; renderMonth(); };
   document.getElementById('editDuty').onclick = () => openEditDuty(id);
-  document.getElementById('deleteDuty').onclick = () => {
-    if (confirm('Diesen Dienst mit allen Einsätzen löschen?')) {
-      state.duties = state.duties.filter(item => item.id !== id);
-      saveState();
-      selectedDutyId = null;
-      renderMonth();
-    }
-  };
-  bindDeletes();
+  document.getElementById('deleteDuty').onclick = () => deleteDutyById(id);
+  bindInteractiveEntries();
 }
 
 function entryRow(duty, entry, withDelete) {
@@ -276,27 +282,127 @@ function entryRow(duty, entry, withDelete) {
   const end = new Date(entry.end);
   const badgeClass = entry.type === 'Telefonisch' ? 'type-phone' : 'type-house';
   const endDateText = localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`;
-  return `<div class="row">
-    <div class="row-main">
-      <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
-      <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
-      ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
+  return `<div class="swipe-item entry-swipe-item" data-kind="entry" data-duty="${duty.id}" data-entry="${entry.id}">
+    ${withDelete ? '<button class="swipe-delete-action" type="button" aria-label="Einsatz löschen">Löschen</button>' : ''}
+    <div class="swipe-content row entry-row" role="button" tabindex="0">
+      <div class="row-main">
+        <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
+        <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
+        ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
+      </div>
+      <div class="row-value">${minutes(entry)} Min.</div>
+      <span class="chevron">›</span>
     </div>
-    <div class="row-value">${minutes(entry)} Min.</div>
-    ${withDelete ? `<button class="delete" type="button" data-duty="${duty.id}" data-entry="${entry.id}">Löschen</button>` : ''}
   </div>`;
 }
-function bindDeletes() {
-  for (const button of document.querySelectorAll('.delete')) {
-    button.onclick = () => {
-      if (!confirm('Einsatz löschen?')) return;
-      const duty = state.duties.find(item => item.id === button.dataset.duty);
-      if (!duty) return;
-      duty.entries = duty.entries.filter(entry => entry.id !== button.dataset.entry);
-      saveState();
-      render();
-    };
+
+function haptic() {
+  if (navigator.vibrate) navigator.vibrate(12);
+}
+function deleteDutyById(id) {
+  if (!confirm('Diesen Dienst mit allen Einsätzen löschen?')) return;
+  state.duties = state.duties.filter(item => item.id !== id);
+  saveState();
+  if (selectedDutyId === id) selectedDutyId = null;
+  haptic();
+  render();
+}
+function deleteEntryById(dutyId, entryId) {
+  if (!confirm('Einsatz löschen?')) return;
+  const duty = state.duties.find(item => item.id === dutyId);
+  if (!duty) return;
+  duty.entries = duty.entries.filter(entry => entry.id !== entryId);
+  saveState();
+  haptic();
+  render();
+}
+function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
+  const content = item.querySelector('.swipe-content');
+  const deleteButton = item.querySelector('.swipe-delete-action');
+  if (!content) return;
+  let startX = 0, startY = 0, currentX = 0, dragging = false, moved = false, longPressed = false;
+  let timer = null;
+  const close = () => { content.style.transform = ''; item.classList.remove('open'); };
+  const begin = event => {
+    const point = event.touches ? event.touches[0] : event;
+    startX = point.clientX; startY = point.clientY; currentX = item.classList.contains('open') ? -92 : 0;
+    dragging = true; moved = false; longPressed = false;
+    timer = setTimeout(() => {
+      if (!moved && dragging && onLongPress) { longPressed = true; dragging = false; close(); haptic(); onLongPress(); }
+    }, 550);
+  };
+  const move = event => {
+    if (!dragging) return;
+    const point = event.touches ? event.touches[0] : event;
+    const dx = point.clientX - startX, dy = point.clientY - startY;
+    if (Math.abs(dx) > 7 || Math.abs(dy) > 7) { moved = true; clearTimeout(timer); }
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    event.preventDefault();
+    const x = Math.max(-108, Math.min(0, currentX + dx));
+    content.style.transform = `translateX(${x}px)`;
+  };
+  const end = event => {
+    clearTimeout(timer);
+    if (!dragging) return;
+    dragging = false;
+    const point = event.changedTouches ? event.changedTouches[0] : event;
+    const dx = point.clientX - startX;
+    const finalX = currentX + dx;
+    if (finalX < -45) { content.style.transform = 'translateX(-92px)'; item.classList.add('open'); }
+    else close();
+  };
+  content.addEventListener('touchstart', begin, { passive: true });
+  content.addEventListener('touchmove', move, { passive: false });
+  content.addEventListener('touchend', end);
+  content.addEventListener('pointerdown', event => { if (event.pointerType === 'mouse') begin(event); });
+  content.addEventListener('pointermove', event => { if (event.pointerType === 'mouse') move(event); });
+  content.addEventListener('pointerup', event => { if (event.pointerType === 'mouse') end(event); });
+  content.addEventListener('click', event => {
+    if (moved || longPressed || item.classList.contains('open')) { event.preventDefault(); if (item.classList.contains('open')) close(); return; }
+    onOpen();
+  });
+  content.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(); } });
+  if (deleteButton) deleteButton.onclick = event => { event.stopPropagation(); onDelete(); };
+}
+function bindInteractiveDuties() {
+  for (const item of document.querySelectorAll('.swipe-item[data-kind="duty"]')) {
+    const id = item.dataset.duty;
+    bindSwipeItem(item,
+      () => { selectedDutyId = id; renderDutyDetail(id); },
+      () => deleteDutyById(id),
+      () => openDutyContextMenu(id));
   }
+}
+function bindInteractiveEntries() {
+  for (const item of document.querySelectorAll('.swipe-item[data-kind="entry"]')) {
+    const dutyId = item.dataset.duty, entryId = item.dataset.entry;
+    bindSwipeItem(item,
+      () => openEditEntry(dutyId, entryId),
+      () => deleteEntryById(dutyId, entryId),
+      () => openEntryContextMenu(dutyId, entryId));
+  }
+}
+function openDutyContextMenu(dutyId) {
+  modalContent.innerHTML = `<div class="modal-body action-sheet-body">
+    <div class="modal-title">Dienst</div>
+    <button type="button" class="secondary-button" id="contextEditDuty">Dienst bearbeiten</button>
+    <button type="button" class="secondary-button danger-button" id="contextDeleteDuty">Dienst löschen</button>
+    <button class="secondary-button">Abbrechen</button>
+  </div>`;
+  modal.showModal();
+  document.getElementById('contextEditDuty').onclick = () => { modal.close(); openEditDuty(dutyId); };
+  document.getElementById('contextDeleteDuty').onclick = () => { modal.close(); deleteDutyById(dutyId); };
+}
+function openEntryContextMenu(dutyId, entryId) {
+  modalContent.innerHTML = `<div class="modal-body action-sheet-body">
+    <div class="modal-title">Einsatz</div>
+    <button type="button" class="secondary-button" id="contextEditEntry">Einsatz bearbeiten</button>
+    <button type="button" class="secondary-button danger-button" id="contextDeleteEntry">Einsatz löschen</button>
+    <button class="secondary-button">Abbrechen</button>
+  </div>`;
+  modal.showModal();
+  document.getElementById('contextEditEntry').onclick = () => { modal.close(); openEditEntry(dutyId, entryId); };
+  document.getElementById('contextDeleteEntry').onclick = () => { modal.close(); deleteEntryById(dutyId, entryId); };
 }
 
 function openNewDuty() {
@@ -387,7 +493,7 @@ function openNewEntry(dutyId) {
   const now = new Date();
   const defaultDate = now >= start && now < dutyEnd(duty) ? now : start;
   const defaultEnd = new Date(defaultDate.getTime() + 15 * 60000);
-  modalContent.innerHTML = `<div class="modal-body">
+  modalContent.innerHTML = `<div class="modal-body entry-form-body">
     <div class="modal-title">Neuer Einsatz</div>
     <div class="segment"><button type="button" class="selected" data-type="Telefonisch">Telefonisch</button><button type="button" data-type="Im Haus">Im Haus</button></div>
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
@@ -424,6 +530,43 @@ function openNewEntry(dutyId) {
   };
 }
 
+function openEditEntry(dutyId, entryId) {
+  const duty = state.duties.find(item => item.id === dutyId);
+  const entry = duty?.entries.find(item => item.id === entryId);
+  if (!duty || !entry) return;
+  let type = entry.type;
+  const start = new Date(entry.start), end = new Date(entry.end);
+  modalContent.innerHTML = `<div class="modal-body entry-form-body">
+    <div class="modal-title">Einsatz bearbeiten</div>
+    <div class="segment"><button type="button" class="${type === 'Telefonisch' ? 'selected' : ''}" data-type="Telefonisch">Telefonisch</button><button type="button" class="${type === 'Im Haus' ? 'selected' : ''}" data-type="Im Haus">Im Haus</button></div>
+    <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(start)}"></label>
+    <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(start.getHours())}:${pad(start.getMinutes())}"></label>
+    <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(end.getHours())}:${pad(end.getMinutes())}"></label>
+    <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP">${escapeHtml(entry.note || '')}</textarea></label>
+    <div id="modalError" class="error"></div>
+    <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
+  </div>`;
+  modal.showModal();
+  for (const button of modalContent.querySelectorAll('[data-type]')) button.onclick = () => {
+    type = button.dataset.type;
+    for (const item of modalContent.querySelectorAll('[data-type]')) item.classList.toggle('selected', item === button);
+  };
+  document.getElementById('saveEntry').onclick = () => {
+    const date = document.getElementById('entryDate').value;
+    const startTime = document.getElementById('entryStart').value;
+    const endTime = document.getElementById('entryEnd').value;
+    const note = document.getElementById('entryNote').value.trim();
+    const error = document.getElementById('modalError'); error.textContent = '';
+    if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
+    const startDate = new Date(`${date}T${startTime}:00`), endDate = new Date(`${date}T${endTime}:00`);
+    if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
+    if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
+    if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
+    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), note });
+    saveState(); haptic(); modal.close(); render();
+  };
+}
+
 function privacyNote() {
   return `<div class="privacy-note"><span aria-hidden="true">🔒</span><span>Alle Dienste und Einsätze werden ausschließlich lokal auf diesem Gerät gespeichert. Es findet keine Cloud-Synchronisierung und keine Übertragung an GitHub statt.</span></div>`;
 }
@@ -453,7 +596,7 @@ function openBackupMenu() {
   document.getElementById('importBackup').onclick = () => { modal.close(); importInput.click(); };
 }
 function exportBackup() {
-  const backup = { version: 5, exportedAt: new Date().toISOString(), duties: state.duties };
+  const backup = { version: APP_VERSION, exportedAt: new Date().toISOString(), duties: state.duties };
   downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `Dienst-Sicherung-${localDateKey(new Date())}.json`);
   localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
   showBackupReminder();

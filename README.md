@@ -1,21 +1,16 @@
-# Dienst – Web-App Version 5
+# Dienst – Version 6
 
-Installierbare, offlinefähige Web-App zur lokalen Erfassung von Bereitschaftsdiensten.
+Progressive Web App zur lokalen Erfassung von Bereitschaftsdiensten.
 
-## Dienstzeiten
+## Neu in Version 6
 
-- Montag bis Donnerstag: 07:15 Uhr bis 07:15 Uhr am Folgetag
-- Freitag: 07:15 Uhr bis 08:30 Uhr am Folgetag
-- Samstag: 08:30 Uhr bis 08:30 Uhr am Folgetag
-- Sonntag: 08:30 Uhr bis 07:15 Uhr am Folgetag
+- Dienste in der Monatsansicht nach links wischen und löschen
+- Langer Druck auf einen Dienst: Bearbeiten oder Löschen
+- Einsätze antippen und nachträglich bearbeiten
+- Einsätze nach links wischen und löschen
+- Langer Druck auf einen Einsatz: Bearbeiten oder Löschen
+- Festes Eingabefenster ohne horizontales Verschieben
+- Nur vertikales Scrollen in längeren Formularen
+- Kompakte Zusammenfassung jedes Dienstes in der Monatsansicht
 
-## Neu in Version 5
-
-- Erfasste Dienste können nachträglich bearbeitet werden.
-- Beim Erfassen eines Einsatzes kann eine optionale Bemerkung eingetragen werden, zum Beispiel „OP“.
-- Die Bemerkung erscheint in der Einsatzliste und im CSV-Export.
-- Dienstbeginn und Dienstende werden automatisch anhand des Wochentags berechnet.
-
-## Datenschutz
-
-Alle persönlichen Daten werden ausschließlich lokal im Browser-Speicher des jeweiligen Geräts gespeichert. Es gibt keine Cloud-Synchronisierung und keine Übertragung der Einträge an GitHub.
+Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des jeweiligen Geräts.
