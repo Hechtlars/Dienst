@@ -14,3 +14,14 @@ Progressive Web App zur lokalen Erfassung von Bereitschaftsdiensten.
 - Kompakte Zusammenfassung jedes Dienstes in der Monatsansicht
 
 Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des jeweiligen Geräts.
+
+
+## Version 6.2
+- Aktiver Dienst wird beim Öffnen/Zurückkehren aus dem Hintergrund sofort neu geprüft.
+- Zusätzliche Prüfung alle 30 Sekunden, damit Dienstgrenzen ohne Neustart erkannt werden.
+- Nach dem Anlegen eines Dienstes wird die Dienstansicht sofort erzwungen und aktualisiert.
+
+
+## Version 6.3
+- Beim Öffnen von „Einsatz hinzufügen“ wird die Endzeit standardmäßig auf 10 Minuten nach der Startzeit gesetzt.
+- Die Endzeit kann weiterhin manuell geändert werden.

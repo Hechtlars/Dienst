@@ -3,7 +3,7 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = 6;
+const APP_VERSION = '6.3';
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -157,10 +157,29 @@ function render() {
   else renderMonth();
 }
 
+// iOS kann eine installierte Web-App im Hintergrund einfrieren und beim Öffnen
+// exakt an derselben Stelle fortsetzen. Deshalb prüfen wir zeitabhängige Ansichten
+// beim Wiederkehren in die App und regelmäßig erneut.
+let lastDutySignature = '';
+function dutyViewSignature() {
+  const duty = activeDuty();
+  return duty ? `${duty.id}|${duty.date}|${duty.entries.length}|${sum(duty, 'Telefonisch')}|${sum(duty, 'Im Haus')}` : 'none';
+}
+function refreshTimeSensitiveView(force = false) {
+  if (document.visibilityState === 'hidden') return;
+  if (currentView !== 'dienst') return;
+  const signature = dutyViewSignature();
+  if (force || signature !== lastDutySignature) {
+    lastDutySignature = signature;
+    renderDuty();
+  }
+}
+
 function renderDuty() {
   title.textContent = 'Dienst';
   subtitle.textContent = 'Bereitschaft erfassen';
   const duty = activeDuty();
+  lastDutySignature = dutyViewSignature();
   if (!duty) {
     main.innerHTML = `
       <section class="empty-card">
@@ -445,7 +464,10 @@ function openNewDuty() {
     state.duties.push({ id: uid(), date, entries: [] });
     saveState();
     modal.close();
-    render();
+    currentView = 'dienst';
+    selectedDutyId = null;
+    for (const tab of document.querySelectorAll('.tab')) tab.classList.toggle('active', tab.dataset.view === 'dienst');
+    refreshTimeSensitiveView(true);
   };
 }
 
@@ -508,7 +530,7 @@ function openNewEntry(dutyId) {
   const start = dutyStart(duty);
   const now = new Date();
   const defaultDate = now >= start && now < dutyEnd(duty) ? now : start;
-  const defaultEnd = new Date(defaultDate.getTime() + 15 * 60000);
+  const defaultEnd = new Date(defaultDate.getTime() + 10 * 60000);
   modalContent.innerHTML = `<div class="modal-body entry-form-body">
     <div class="modal-title">Neuer Einsatz</div>
     <div class="segment"><button type="button" class="selected" data-type="Telefonisch">Telefonisch</button><button type="button" data-type="Im Haus">Im Haus</button></div>
@@ -674,6 +696,17 @@ function printMonthReport() {
   report.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Dienst – ${fmtMonth(selectedMonth)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:36px;color:#111}h1{margin-bottom:4px}p{color:#666;margin-top:0}table{width:100%;border-collapse:collapse;margin-top:24px;font-size:13px}th,td{border-bottom:1px solid #ddd;padding:10px 7px;text-align:left}th{background:#f3f4f6}.summary{display:flex;gap:12px;margin-top:20px}.box{border:1px solid #ddd;border-radius:10px;padding:12px 16px}.box strong{display:block;font-size:22px;margin-top:5px}@media print{body{margin:18mm}}</style></head><body><h1>Dienst – ${fmtMonth(selectedMonth)}</h1><p>Monatsbericht · lokal auf dem Gerät erstellt</p><div class="summary"><div class="box">Telefonisch<strong>${totals.phoneHours} Std.</strong></div><div class="box">Im Haus<strong>${totals.houseHours} Std.</strong></div><div class="box">Gesamt<strong>${totals.phoneHours + totals.houseHours} Std.</strong></div></div><table><thead><tr><th>Dienst</th><th>Telefonisch</th><th>Gerundet</th><th>Im Haus</th><th>Gerundet</th><th>Gesamt</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
   report.document.close();
 }
+
+// Beim Zurückkehren aus dem Hintergrund oder nach dem Entsperren aktualisieren.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshTimeSensitiveView(true);
+});
+window.addEventListener('pageshow', () => refreshTimeSensitiveView(true));
+window.addEventListener('focus', () => refreshTimeSensitiveView(true));
+
+// Ein laufender Prozess muss nicht neu gestartet werden, wenn eine Dienstgrenze
+// (07:15 / 08:30) überschritten wird. Ein kurzer, lokaler Check genügt.
+setInterval(() => refreshTimeSensitiveView(false), 30000);
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
