@@ -27,15 +27,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Die Endzeit kann weiterhin manuell geändert werden.
 
 
-## Version 6.5
+## Version 6.4
 - Dienst-Datumsformular auf iPhones weiter oben positioniert.
 - Optionale lokale Vergütungsanzeige über das Drei-Punkte-Menü.
 - Zwei getrennte Stundensätze: Bereitschaftsstunden und Pauschalenbasis.
 - Pauschale Mo–Fr 200 %, Sa/So 400 %.
 - Vergütung pro Dienst und Monatsgesamtsumme.
 - Lohnangaben bleiben ausschließlich lokal gespeichert und sind Bestandteil der manuellen Sicherungsdatei.
-
-## Version 6.5
-- Stundenlöhne können mit einem „Gültig ab“-Datum gespeichert werden.
-- Frühere Dienste behalten automatisch den für ihr Datum gültigen alten Lohnsatz.
-- Mehrere Lohnzeiträume werden lokal auf dem Gerät gespeichert.

@@ -338,9 +338,9 @@ function payDetailCard(duty) {
   const dayText = pay.multiplier === 4 ? 'Samstag/Sonntag · 400 %' : 'Montag–Freitag · 200 %';
   return `<div class="card-header">Vergütung</div>
     <section class="card pay-detail-card">
-      <div class="row"><div class="row-main"><div class="row-title">Bereitschaftsstunden</div><div class="row-subtitle">${pay.hours} Std. × ${fmtMoney(pay.rates.workHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.hoursPay)}</div></div>
-      <div class="row"><div class="row-main"><div class="row-title">Dienstpauschale</div><div class="row-subtitle">${dayText} von ${fmtMoney(pay.rates.allowanceHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.allowance)}</div></div>
-      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamtvergütung</div><div class="row-subtitle">Pauschale + gerundete Bereitschaftsstunden</div></div><div class="row-value total-value">${fmtMoney(pay.total)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Arbeit in RB</div><div class="row-subtitle">${pay.hours} Std. × ${fmtMoney(pay.rates.workHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.hoursPay)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Rufbereitschaft Pauschale</div><div class="row-subtitle">${dayText} von ${fmtMoney(pay.rates.allowanceHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.allowance)}</div></div>
+      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamtvergütung</div><div class="row-subtitle">Pauschale + gerundete Arbeit in RB</div></div><div class="row-value total-value">${fmtMoney(pay.total)}</div></div>
     </section>`;
 }
 
