@@ -3,7 +3,7 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '6.3';
+const APP_VERSION = '6.5';
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -43,10 +43,26 @@ backupReminderButton.addEventListener('click', openBackupMenu);
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return parsed && Array.isArray(parsed.duties) ? parsed : { duties: [] };
+    return parsed && Array.isArray(parsed.duties) ? { ...parsed, settings: normalizeSettings(parsed.settings) } : { duties: [], settings: normalizeSettings() };
   } catch {
-    return { duties: [] };
+    return { duties: [], settings: normalizeSettings() };
   }
+}
+function normalizeSettings(settings = {}) {
+  const workHourlyRate = Number.isFinite(Number(settings.workHourlyRate)) ? Number(settings.workHourlyRate) : 50.96;
+  const allowanceHourlyRate = Number.isFinite(Number(settings.allowanceHourlyRate)) ? Number(settings.allowanceHourlyRate) : 43.42;
+  let rateHistory = Array.isArray(settings.rateHistory) ? settings.rateHistory
+    .filter(item => item && /^\d{4}-\d{2}-\d{2}$/.test(item.validFrom) && Number.isFinite(Number(item.workHourlyRate)) && Number.isFinite(Number(item.allowanceHourlyRate)))
+    .map(item => ({ validFrom: item.validFrom, workHourlyRate: Number(item.workHourlyRate), allowanceHourlyRate: Number(item.allowanceHourlyRate) })) : [];
+  if (!rateHistory.length) rateHistory = [{ validFrom: '1900-01-01', workHourlyRate, allowanceHourlyRate }];
+  rateHistory.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+  const latest = rateHistory[rateHistory.length - 1];
+  return {
+    showPay: Boolean(settings.showPay),
+    workHourlyRate: latest.workHourlyRate,
+    allowanceHourlyRate: latest.allowanceHourlyRate,
+    rateHistory
+  };
 }
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -92,6 +108,24 @@ function minutes(entry) { return Math.max(0, Math.round((new Date(entry.end) - n
 function sum(duty, type) { return duty.entries.filter(entry => entry.type === type).reduce((total, entry) => total + minutes(entry), 0); }
 function roundedHours(minuteCount) { return Math.ceil(minuteCount / 60); }
 function hourLabel(value) { return `${value} ${value === 1 ? 'Stunde' : 'Stunden'}`; }
+function fmtMoney(value) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value); }
+function dutyRoundedHours(duty) { return roundedHours(sum(duty, 'Telefonisch')) + roundedHours(sum(duty, 'Im Haus')); }
+function dutyAllowanceMultiplier(duty) { const day = parseLocalDate(duty.date).getDay(); return day === 0 || day === 6 ? 4 : 2; }
+function ratesForDuty(duty) {
+  const settings = state.settings || normalizeSettings();
+  const history = Array.isArray(settings.rateHistory) && settings.rateHistory.length ? settings.rateHistory : [{ validFrom: '1900-01-01', workHourlyRate: settings.workHourlyRate, allowanceHourlyRate: settings.allowanceHourlyRate }];
+  const applicable = history.filter(item => item.validFrom <= duty.date).sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0] || history[0];
+  return applicable;
+}
+function dutyPay(duty) {
+  const rates = ratesForDuty(duty);
+  const hours = dutyRoundedHours(duty);
+  const hoursPay = hours * rates.workHourlyRate;
+  const multiplier = dutyAllowanceMultiplier(duty);
+  const allowance = multiplier * rates.allowanceHourlyRate;
+  return { hours, hoursPay, multiplier, allowance, total: hoursPay + allowance, rates };
+}
+function monthPay(duties) { return duties.reduce((total, duty) => total + dutyPay(duty).total, 0); }
 function sortedDuties() { return [...state.duties].sort((a, b) => dutyStart(b) - dutyStart(a)); }
 function activeDuty() { const now = new Date(); return sortedDuties().find(duty => dutyStart(duty) <= now && now < dutyEnd(duty)); }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
@@ -232,6 +266,7 @@ function renderMonth() {
       <div class="month-stat"><div class="month-stat-label">Im Haus</div><div class="month-stat-value">${totals.houseHours} Std.</div></div>
       <div class="month-stat"><div class="month-stat-label">Gesamt</div><div class="month-stat-value">${totalHours} Std.</div></div>
     </section>
+    ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div></section>` : ''}
     <div class="month-actions">
       <button class="action-button" id="exportCsv" type="button">CSV exportieren</button>
       <button class="action-button" id="printReport" type="button">PDF-Bericht</button>
@@ -286,6 +321,7 @@ function renderDutyDetail(id) {
     </section>
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Keine Einsätze</div>'}</section>
+    ${state.settings.showPay ? payDetailCard(duty) : ''}
     <div class="detail-actions">
       <button class="secondary-button" id="editDuty" type="button">Dienst bearbeiten</button>
       <button class="secondary-button danger-button" id="deleteDuty" type="button">Dienst löschen</button>
@@ -294,6 +330,18 @@ function renderDutyDetail(id) {
   document.getElementById('editDuty').onclick = () => openEditDuty(id);
   document.getElementById('deleteDuty').onclick = () => deleteDutyById(id);
   bindInteractiveEntries();
+}
+
+function payDetailCard(duty) {
+  const pay = dutyPay(duty);
+  const settings = state.settings;
+  const dayText = pay.multiplier === 4 ? 'Samstag/Sonntag · 400 %' : 'Montag–Freitag · 200 %';
+  return `<div class="card-header">Vergütung</div>
+    <section class="card pay-detail-card">
+      <div class="row"><div class="row-main"><div class="row-title">Bereitschaftsstunden</div><div class="row-subtitle">${pay.hours} Std. × ${fmtMoney(pay.rates.workHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.hoursPay)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Dienstpauschale</div><div class="row-subtitle">${dayText} von ${fmtMoney(pay.rates.allowanceHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.allowance)}</div></div>
+      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamtvergütung</div><div class="row-subtitle">Pauschale + gerundete Bereitschaftsstunden</div></div><div class="row-value total-value">${fmtMoney(pay.total)}</div></div>
+    </section>`;
 }
 
 function entryRow(duty, entry, withDelete) {
@@ -441,6 +489,7 @@ function openEntryContextMenu(dutyId, entryId) {
 }
 
 function openNewDuty() {
+  modal.classList.add('duty-date-dialog');
   const now = new Date();
   const initialDate = localDateKey(now);
   modalContent.innerHTML = `<div class="modal-body">
@@ -472,6 +521,7 @@ function openNewDuty() {
 }
 
 function openEditDuty(dutyId) {
+  modal.classList.add('duty-date-dialog');
   const duty = state.duties.find(item => item.id === dutyId);
   if (!duty) return;
   modalContent.innerHTML = `<div class="modal-body">
@@ -610,15 +660,64 @@ function privacyNote() {
 }
 
 function openMenu() {
+  const settings = state.settings || normalizeSettings();
   modalContent.innerHTML = `<div class="modal-body">
     <div class="modal-title">Mehr</div>
+    <div class="modal-section-title">Anzeige</div>
+    <label class="settings-toggle-row">
+      <span><strong>Stundenlohn anzeigen</strong><small>Vergütung pro Dienst und Monat berechnen</small></span>
+      <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <div id="paySettings" class="pay-settings" ${settings.showPay ? '' : 'hidden'}>
+      <label class="field"><span>Stundenlohn Bereitschaftsdienst</span><div class="money-input"><input id="workHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.workHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
+      <label class="field"><span>Stundenlohn für Dienstpauschale</span><div class="money-input"><input id="allowanceHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.allowanceHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
+      <label class="field"><span>Gültig ab</span><input id="rateValidFrom" type="date" value="${localDateKey(new Date())}"></label>
+      <div class="small-note">Neue Löhne gelten erst ab diesem Datum. Frühere Dienste werden weiterhin mit dem damals gültigen Satz berechnet. Speichere bei einer Lohnerhöhung einfach den neuen Satz mit dem passenden Datum.</div>
+      ${settings.rateHistory.length > 1 ? `<div class="rate-history"><strong>Gespeicherte Lohnzeiträume</strong>${settings.rateHistory.filter(r => r.validFrom !== '1900-01-01').slice().reverse().map(r => `<div class="rate-history-row"><span>ab ${fmtShortDate(parseLocalDate(r.validFrom))}</span><span>${fmtMoney(r.workHourlyRate)} / ${fmtMoney(r.allowanceHourlyRate)}</span></div>`).join('')}</div>` : ''}
+      <div class="small-note">Pauschale: Montag–Freitag 200 % dieses Satzes, Samstag/Sonntag 400 %. Die Einsatzstunden werden wie bisher je Dienstart auf volle Stunden aufgerundet und anschließend addiert.</div>
+      <button type="button" class="primary settings-save" id="savePaySettings">Einstellungen speichern</button>
+    </div>
     <div class="modal-section-title">Lokale Daten</div>
     <button type="button" class="secondary-button" id="openBackup">Datensicherung</button>
     <div class="modal-section-title">Hinweis</div>
-    <div class="privacy-note"><span aria-hidden="true">🔒</span><span>Die App speichert alle persönlichen Einträge nur im lokalen Browser-Speicher dieses Geräts. GitHub enthält ausschließlich den Programmcode.</span></div>
+    <div class="privacy-note"><span aria-hidden="true">🔒</span><span>Auch die Lohnangaben werden ausschließlich lokal auf diesem Gerät gespeichert und nicht an GitHub oder einen Server übertragen.</span></div>
     <button class="secondary-button">Schließen</button>
   </div>`;
   modal.showModal();
+  const toggle = document.getElementById('showPayToggle');
+  const paySettings = document.getElementById('paySettings');
+  toggle.onchange = () => {
+    paySettings.hidden = !toggle.checked;
+    if (!toggle.checked) {
+      state.settings.showPay = false;
+      saveState();
+      render();
+    }
+  };
+  document.getElementById('savePaySettings').onclick = () => {
+    const workRate = Number(document.getElementById('workHourlyRate').value.replace?.(',', '.') ?? document.getElementById('workHourlyRate').value);
+    const allowanceRate = Number(document.getElementById('allowanceHourlyRate').value.replace?.(',', '.') ?? document.getElementById('allowanceHourlyRate').value);
+    if (!Number.isFinite(workRate) || workRate < 0 || !Number.isFinite(allowanceRate) || allowanceRate < 0) {
+      alert('Bitte gültige Stundenlöhne eingeben.');
+      return;
+    }
+    const validFrom = document.getElementById('rateValidFrom').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) {
+      alert('Bitte ein gültiges Datum für „Gültig ab“ auswählen.');
+      return;
+    }
+    const history = Array.isArray(state.settings.rateHistory) ? [...state.settings.rateHistory] : [];
+    const existingIndex = history.findIndex(item => item.validFrom === validFrom);
+    const newRate = { validFrom, workHourlyRate: workRate, allowanceHourlyRate: allowanceRate };
+    if (existingIndex >= 0) history[existingIndex] = newRate; else history.push(newRate);
+    history.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
+    state.settings = normalizeSettings({ ...state.settings, showPay: toggle.checked, rateHistory: history });
+    saveState();
+    haptic();
+    modal.close();
+    render();
+  };
   document.getElementById('openBackup').onclick = () => { modal.close(); openBackupMenu(); };
 }
 function openBackupMenu() {
@@ -634,7 +733,7 @@ function openBackupMenu() {
   document.getElementById('importBackup').onclick = () => { modal.close(); importInput.click(); };
 }
 function exportBackup() {
-  const backup = { version: APP_VERSION, exportedAt: new Date().toISOString(), duties: state.duties };
+  const backup = { version: APP_VERSION, exportedAt: new Date().toISOString(), duties: state.duties, settings: state.settings };
   downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `Dienst-Sicherung-${localDateKey(new Date())}.json`);
   localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
   showBackupReminder();
@@ -652,6 +751,7 @@ async function importBackup(event) {
     const entryCount = data.duties.reduce((count, duty) => count + duty.entries.length, 0);
     if (confirm(`Die Sicherung enthält ${dutyCount} Dienste und ${entryCount} Einsätze. Vorhandene lokale Daten wirklich ersetzen?`)) {
       state.duties = data.duties;
+      if (parsed.settings) state.settings = normalizeSettings(parsed.settings);
       saveState();
       localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
       showBackupReminder();
@@ -745,4 +845,5 @@ modal.addEventListener('click', event => {
 });
 modal.addEventListener('close', () => {
   modal.classList.remove('action-sheet-open');
+  modal.classList.remove('duty-date-dialog');
 });

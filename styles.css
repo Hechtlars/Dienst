@@ -216,3 +216,46 @@ dialog.action-sheet-open button {
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+
+/* Version 6.4: Dienst-Datum weiter oben + optionale Vergütungsanzeige */
+@media (max-width: 699px) {
+  dialog.duty-date-dialog {
+    margin: max(72px, calc(env(safe-area-inset-top) + 52px)) auto auto;
+    border-radius: 24px;
+    max-height: 58dvh;
+  }
+  dialog.duty-date-dialog #modalForm,
+  dialog.duty-date-dialog #modalContent { max-height: 58dvh; }
+  dialog.duty-date-dialog .modal-body { padding-bottom: 18px; }
+}
+.settings-toggle-row {
+  position: relative; display: flex; align-items: center; gap: 12px; min-height: 62px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; margin: 6px 0 10px;
+}
+.settings-toggle-row > span:first-child { flex: 1; min-width: 0; }
+.settings-toggle-row strong { display: block; font-size: 16px; }
+.settings-toggle-row small { display: block; color: var(--secondary); font-size: 12px; line-height: 1.35; margin-top: 3px; }
+.switch-input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+.switch { flex: 0 0 auto; width: 51px; height: 31px; border-radius: 999px; background: #d1d3d7; position: relative; transition: background .2s ease; }
+.switch::after { content: ''; position: absolute; width: 27px; height: 27px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .2s ease; }
+.switch-input:checked + .switch { background: #34c759; }
+.switch-input:checked + .switch::after { transform: translateX(20px); }
+.pay-settings[hidden] { display: none; }
+.pay-settings { padding: 2px 2px 8px; }
+.money-input { position: relative; }
+.money-input input { padding-right: 82px; }
+.money-input span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); margin: 0 !important; color: var(--secondary); font-size: 14px !important; pointer-events: none; }
+.settings-save { margin-top: 12px; }
+.pay-month-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 17px; padding: 16px; margin: 10px 0 12px; box-shadow: var(--shadow); }
+.pay-kicker { font-size: 15px; font-weight: 750; }
+.pay-subtitle { color: var(--secondary); font-size: 12px; margin-top: 3px; }
+.pay-month-value { color: var(--accent); font-weight: 850; font-size: 22px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pay-detail-card .row-value { font-variant-numeric: tabular-nums; }
+@media (max-width: 430px) {
+  .pay-month-card { align-items: flex-start; }
+  .pay-month-value { font-size: 20px; }
+}
+@media (prefers-color-scheme: dark) {
+  .switch { background: #55585f; }
+}
