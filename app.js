@@ -3,7 +3,7 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '6.7';
+const APP_VERSION = '6.9';
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -108,7 +108,15 @@ function timelineHtml(duty) {
   const progress = dutyProgress(duty);
   const percent = Math.round(progress * 1000) / 10;
   return `<div class="duty-timeline" aria-label="Dienstfortschritt ${Math.round(progress * 100)} Prozent">
-    <div class="timeline-track"><div class="timeline-fill" style="width:${percent}%"></div><img class="timeline-ambulance" src="icons/apple-touch-icon.png" alt="" style="left:${percent}%"></div>
+    <div class="timeline-track">
+      <div class="timeline-fill" style="width:${percent}%"></div>
+      <button class="timeline-ambulance-button" type="button" aria-label="Rettungswagen beschleunigen" style="left:${percent}%">
+        <span class="timeline-dust timeline-dust-1" aria-hidden="true"></span>
+        <span class="timeline-dust timeline-dust-2" aria-hidden="true"></span>
+        <span class="timeline-dust timeline-dust-3" aria-hidden="true"></span>
+        <img class="timeline-ambulance" src="icons/apple-touch-icon.png" alt="">
+      </button>
+    </div>
     <div class="timeline-labels"><span>${fmtTime(dutyStart(duty))}</span><span>${Math.round(progress * 100)} %</span><span>${fmtTime(dutyEnd(duty))}</span></div>
   </div>`;
 }
@@ -116,16 +124,62 @@ function updateDutyTimeline() {
   if (currentView !== 'dienst' || !state.settings?.showTimeline) return;
   const duty = activeDuty();
   const track = document.querySelector('.timeline-track');
-  const ambulance = document.querySelector('.timeline-ambulance');
+  const ambulanceButton = document.querySelector('.timeline-ambulance-button');
   const fill = document.querySelector('.timeline-fill');
   const labels = document.querySelector('.timeline-labels');
-  if (!duty || !track || !ambulance || !fill || !labels) return;
+  if (!duty || !track || !ambulanceButton || !fill || !labels) return;
   const progress = dutyProgress(duty);
   const percent = Math.round(progress * 1000) / 10;
   fill.style.width = `${percent}%`;
-  ambulance.style.left = `${percent}%`;
+  ambulanceButton.style.left = `${percent}%`;
   const spans = labels.querySelectorAll('span');
   if (spans[1]) spans[1].textContent = `${Math.round(progress * 100)} %`;
+}
+function bindTimelineBoost() {
+  const button = document.querySelector('.timeline-ambulance-button');
+  if (!button) return;
+  let boostPx = 0;
+  let resetTimer = null;
+  let lastTouchEnd = 0;
+  const boost = event => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    boostPx = Math.min(boostPx + 8, 28);
+    button.style.setProperty('--boost-offset', `${boostPx}px`);
+    button.classList.remove('boosting');
+    void button.offsetWidth;
+    button.classList.add('boosting');
+    haptic();
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => {
+      boostPx = 0;
+      button.style.setProperty('--boost-offset', '0px');
+      button.classList.remove('boosting');
+    }, 900);
+  };
+  button.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'touch') event.preventDefault();
+  }, { passive: false });
+  button.addEventListener('touchstart', event => {
+    event.preventDefault();
+  }, { passive: false });
+  button.addEventListener('touchend', event => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 350) event.preventDefault();
+    lastTouchEnd = now;
+    boost(event);
+  }, { passive: false });
+  button.addEventListener('click', event => {
+    if (event.detail > 1) event.preventDefault();
+    if (event.pointerType === 'touch') return;
+    boost(event);
+  });
+  button.addEventListener('dblclick', event => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
 }
 function scheduleText(dateKey) {
   const temp = { date: dateKey };
@@ -281,7 +335,9 @@ function renderDuty() {
   document.getElementById('editActiveDuty').onclick = () => openEditDuty(duty.id);
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   bindInteractiveEntries();
+  bindTimelineBoost();
 }
+
 
 function renderMonth() {
   title.textContent = 'Monat';
