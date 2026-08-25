@@ -3,7 +3,7 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '6.5';
+const APP_VERSION = '6.7';
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -59,6 +59,7 @@ function normalizeSettings(settings = {}) {
   const latest = rateHistory[rateHistory.length - 1];
   return {
     showPay: Boolean(settings.showPay),
+    showTimeline: Boolean(settings.showTimeline),
     workHourlyRate: latest.workHourlyRate,
     allowanceHourlyRate: latest.allowanceHourlyRate,
     rateHistory
@@ -96,6 +97,36 @@ function dutyEnd(duty) {
   return date;
 }
 function dutyTimeText(duty) { return `${fmtTime(dutyStart(duty))} Uhr – ${fmtTime(dutyEnd(duty))} Uhr am Folgetag`; }
+function dutyProgress(duty, now = new Date()) {
+  const start = dutyStart(duty).getTime();
+  const end = dutyEnd(duty).getTime();
+  if (end <= start) return 0;
+  return Math.max(0, Math.min(1, (now.getTime() - start) / (end - start)));
+}
+function timelineHtml(duty) {
+  if (!state.settings?.showTimeline) return '';
+  const progress = dutyProgress(duty);
+  const percent = Math.round(progress * 1000) / 10;
+  return `<div class="duty-timeline" aria-label="Dienstfortschritt ${Math.round(progress * 100)} Prozent">
+    <div class="timeline-track"><div class="timeline-fill" style="width:${percent}%"></div><img class="timeline-ambulance" src="icons/apple-touch-icon.png" alt="" style="left:${percent}%"></div>
+    <div class="timeline-labels"><span>${fmtTime(dutyStart(duty))}</span><span>${Math.round(progress * 100)} %</span><span>${fmtTime(dutyEnd(duty))}</span></div>
+  </div>`;
+}
+function updateDutyTimeline() {
+  if (currentView !== 'dienst' || !state.settings?.showTimeline) return;
+  const duty = activeDuty();
+  const track = document.querySelector('.timeline-track');
+  const ambulance = document.querySelector('.timeline-ambulance');
+  const fill = document.querySelector('.timeline-fill');
+  const labels = document.querySelector('.timeline-labels');
+  if (!duty || !track || !ambulance || !fill || !labels) return;
+  const progress = dutyProgress(duty);
+  const percent = Math.round(progress * 1000) / 10;
+  fill.style.width = `${percent}%`;
+  ambulance.style.left = `${percent}%`;
+  const spans = labels.querySelectorAll('span');
+  if (spans[1]) spans[1].textContent = `${Math.round(progress * 100)} %`;
+}
 function scheduleText(dateKey) {
   const temp = { date: dateKey };
   return `${fmtTime(dutyStart(temp))} Uhr bis ${fmtTime(dutyEnd(temp))} Uhr am Folgetag`;
@@ -206,6 +237,8 @@ function refreshTimeSensitiveView(force = false) {
   if (force || signature !== lastDutySignature) {
     lastDutySignature = signature;
     renderDuty();
+  } else {
+    updateDutyTimeline();
   }
 }
 
@@ -234,6 +267,7 @@ function renderDuty() {
       <div class="hero-kicker">Aktueller Bereitschaftsdienst</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
       <div class="hero-time">${dutyTimeText(duty)}</div>
+      ${timelineHtml(duty)}
     </section>
     <button class="action-button duty-edit-button" id="editActiveDuty" type="button">Dienst bearbeiten</button>
     <section class="stats">
@@ -669,6 +703,11 @@ function openMenu() {
       <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
     </label>
+    <label class="settings-toggle-row">
+      <span><strong>Zeitstrahl anzeigen</strong><small>Fortschritt des aktuellen Bereitschaftsdienstes mit Krankenwagen anzeigen</small></span>
+      <input id="showTimelineToggle" class="switch-input" type="checkbox" ${settings.showTimeline ? 'checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+    </label>
     <div id="paySettings" class="pay-settings" ${settings.showPay ? '' : 'hidden'}>
       <label class="field"><span>Stundenlohn Bereitschaftsdienst</span><div class="money-input"><input id="workHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.workHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
       <label class="field"><span>Stundenlohn für Dienstpauschale</span><div class="money-input"><input id="allowanceHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.allowanceHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
@@ -687,6 +726,12 @@ function openMenu() {
   modal.showModal();
   const toggle = document.getElementById('showPayToggle');
   const paySettings = document.getElementById('paySettings');
+  const timelineToggle = document.getElementById('showTimelineToggle');
+  timelineToggle.onchange = () => {
+    state.settings.showTimeline = timelineToggle.checked;
+    saveState();
+    render();
+  };
   toggle.onchange = () => {
     paySettings.hidden = !toggle.checked;
     if (!toggle.checked) {
@@ -786,14 +831,31 @@ function printMonthReport() {
   const duties = monthDuties().slice().reverse();
   if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
   const totals = monthTotals(duties);
-  const rows = duties.map(duty => {
+  const dutySections = duties.map(duty => {
     const phoneMinutes = sum(duty, 'Telefonisch');
     const houseMinutes = sum(duty, 'Im Haus');
-    return `<tr><td>${fmtDate(dutyStart(duty))}</td><td>${phoneMinutes} Min.</td><td>${roundedHours(phoneMinutes)} Std.</td><td>${houseMinutes} Min.</td><td>${roundedHours(houseMinutes)} Std.</td><td>${roundedHours(phoneMinutes) + roundedHours(houseMinutes)} Std.</td></tr>`;
+    const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
+    const entryRows = entries.length ? entries.map(entry => {
+      const entryStart = new Date(entry.start);
+      const entryEnd = new Date(entry.end);
+      return `<tr><td>${escapeHtml(entry.type)}</td><td>${fmtDate(entryStart)}</td><td>${fmtTime(entryStart)}</td><td>${fmtTime(entryEnd)}</td><td>${minutes(entry)} Min.</td><td>${escapeHtml(entry.note || '–')}</td></tr>`;
+    }).join('') : '<tr><td colspan="6" class="muted">Keine Einsätze erfasst</td></tr>';
+    const pay = state.settings.showPay ? dutyPay(duty) : null;
+    return `<section class="duty-block">
+      <div class="duty-heading"><div><h2>${fmtDate(dutyStart(duty))}</h2><div class="muted">${dutyTimeText(duty)}</div></div><div class="duty-total">${roundedHours(phoneMinutes) + roundedHours(houseMinutes)} Std.</div></div>
+      <div class="duty-summary"><span>Telefonisch: <strong>${phoneMinutes} Min. / ${roundedHours(phoneMinutes)} Std.</strong></span><span>Im Haus: <strong>${houseMinutes} Min. / ${roundedHours(houseMinutes)} Std.</strong></span>${pay ? `<span>Vergütung: <strong>${fmtMoney(pay.total)}</strong></span>` : ''}</div>
+      <table class="entries"><thead><tr><th>Art</th><th>Datum</th><th>Beginn</th><th>Ende</th><th>Dauer</th><th>Bemerkung</th></tr></thead><tbody>${entryRows}</tbody></table>
+    </section>`;
   }).join('');
   const report = window.open('', '_blank');
   if (!report) { alert('Bitte Pop-ups für den PDF-Bericht erlauben.'); return; }
-  report.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Dienst – ${fmtMonth(selectedMonth)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:36px;color:#111}h1{margin-bottom:4px}p{color:#666;margin-top:0}table{width:100%;border-collapse:collapse;margin-top:24px;font-size:13px}th,td{border-bottom:1px solid #ddd;padding:10px 7px;text-align:left}th{background:#f3f4f6}.summary{display:flex;gap:12px;margin-top:20px}.box{border:1px solid #ddd;border-radius:10px;padding:12px 16px}.box strong{display:block;font-size:22px;margin-top:5px}@media print{body{margin:18mm}}</style></head><body><h1>Dienst – ${fmtMonth(selectedMonth)}</h1><p>Monatsbericht · lokal auf dem Gerät erstellt</p><div class="summary"><div class="box">Telefonisch<strong>${totals.phoneHours} Std.</strong></div><div class="box">Im Haus<strong>${totals.houseHours} Std.</strong></div><div class="box">Gesamt<strong>${totals.phoneHours + totals.houseHours} Std.</strong></div></div><table><thead><tr><th>Dienst</th><th>Telefonisch</th><th>Gerundet</th><th>Im Haus</th><th>Gerundet</th><th>Gesamt</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  const monthPayHtml = state.settings.showPay ? `<div class="box">Vergütung<strong>${fmtMoney(monthPay(duties))}</strong></div>` : '';
+  report.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Dienst – ${fmtMonth(selectedMonth)}</title><style>
+    *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:0;color:#111;background:#f4f5f7}.toolbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(255,255,255,.94);border-bottom:1px solid #ddd;backdrop-filter:blur(18px)}button{border:0;border-radius:12px;padding:11px 15px;font:inherit;font-weight:700}.back{background:#e9eaed;color:#111}.print{background:#0a84ff;color:#fff}.page{max-width:920px;margin:0 auto;padding:26px 24px 50px;background:#fff;min-height:100vh}h1{margin:0 0 4px}.intro{color:#666;margin:0}.summary{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.box{border:1px solid #ddd;border-radius:12px;padding:11px 15px;min-width:130px}.box strong{display:block;font-size:21px;margin-top:4px}.duty-block{margin:26px 0;break-inside:avoid-page}.duty-heading{display:flex;justify-content:space-between;gap:15px;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:8px}.duty-heading h2{font-size:18px;margin:0 0 3px}.duty-total{font-size:20px;font-weight:800;white-space:nowrap}.muted{color:#666}.duty-summary{display:flex;flex-wrap:wrap;gap:12px 24px;padding:10px 0;font-size:13px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #ddd;padding:8px 6px;text-align:left;vertical-align:top}th{background:#f3f4f6}.entries{margin-top:3px}@media(max-width:600px){.page{padding:20px 12px 42px}.toolbar{padding-left:10px;padding-right:10px}.duty-block{overflow-x:auto}.entries{min-width:690px}}@media print{body{background:#fff}.toolbar{display:none!important}.page{max-width:none;padding:0;min-height:0}.duty-block{break-inside:avoid-page}body{margin:0}@page{margin:14mm}}
+  </style></head><body><div class="toolbar"><button class="back" id="backBtn" type="button">‹ Zurück zur App</button><button class="print" id="printBtn" type="button">PDF erstellen / Drucken</button></div><main class="page"><h1>Dienst – ${fmtMonth(selectedMonth)}</h1><p class="intro">Monatsbericht · lokal auf dem Gerät erstellt</p><div class="summary"><div class="box">Telefonisch<strong>${totals.phoneHours} Std.</strong></div><div class="box">Im Haus<strong>${totals.houseHours} Std.</strong></div><div class="box">Gesamt<strong>${totals.phoneHours + totals.houseHours} Std.</strong></div>${monthPayHtml}</div>${dutySections}</main><script>
+    document.getElementById('printBtn').onclick=()=>window.print();
+    document.getElementById('backBtn').onclick=()=>{ if(window.opener){window.close(); setTimeout(()=>{try{window.opener.focus()}catch(e){}},0);} else if(history.length>1){history.back();} else {location.href='./';} };
+  <\/script></body></html>`);
   report.document.close();
 }
 

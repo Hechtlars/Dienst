@@ -34,3 +34,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Pauschale Mo–Fr 200 %, Sa/So 400 %.
 - Vergütung pro Dienst und Monatsgesamtsumme.
 - Lohnangaben bleiben ausschließlich lokal gespeichert und sind Bestandteil der manuellen Sicherungsdatei.
+
+
+## Neu in Version 6.7
+- PDF-Bericht zeigt jetzt alle Einsätze je Dienst.
+- Berichtsvorschau mit Zurück-zur-App-Button und separatem PDF/Drucken-Button.
+- Optionaler Zeitstrahl unter dem aktuellen Dienst; Krankenwagen zeigt den Fortschritt.
+- Zeitstrahl unter ••• ein-/ausschaltbar.
