@@ -301,3 +301,57 @@ dialog.action-sheet-open button {
 .timeline-labels span:nth-child(2) { color: var(--accent); font-weight: 800; }
 .timeline-labels span:last-child { text-align: right; }
 @media (prefers-color-scheme: dark) { .timeline-track { background: rgba(255,255,255,.17); } .timeline-dust { background: rgba(205,205,205,.65); } }
+
+/* Version 7.0: Home-RTW, Rückgängig und individuelle Dienstzeiten */
+.brand-icon { border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.brand-icon:active { transform: scale(.95); }
+.undo-toast { position: fixed; z-index: 30; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom)); transform: translate(-50%, 18px); width: min(420px, calc(100% - 28px)); background: rgba(28,29,33,.94); color: #fff; border-radius: 15px; padding: 11px 12px 11px 15px; display: flex; align-items: center; justify-content: space-between; gap: 14px; box-shadow: 0 10px 32px rgba(0,0,0,.25); opacity: 0; transition: opacity .2s ease, transform .2s ease; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.undo-toast[hidden] { display: none; }
+.undo-toast.visible { opacity: 1; transform: translate(-50%, 0); }
+.undo-toast button { border: 0; background: transparent; color: #62a8ff; font-weight: 800; padding: 6px 4px; min-height: 36px; }
+.duty-time-settings { margin: 7px 0 16px; padding: 10px 11px 13px; border: 1px solid var(--line); border-radius: 15px; background: rgba(120,120,128,.06); }
+.duty-time-settings[hidden] { display: none; }
+.weekday-time-row { display: grid; grid-template-columns: minmax(86px,1fr) 92px 92px; gap: 8px; align-items: end; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.weekday-time-row:last-of-type { border-bottom: 0; }
+.weekday-time-row > strong { font-size: 13px; padding-bottom: 14px; }
+.weekday-time-row label span { display: block; color: var(--secondary); font-size: 10px; font-weight: 700; margin: 0 0 4px 2px; }
+.weekday-time-row input { min-height: 42px; padding: 8px 6px; font-size: 14px; }
+@media (max-width: 390px) {
+  .weekday-time-row { grid-template-columns: 1fr 84px 84px; gap: 5px; }
+  .weekday-time-row input { font-size: 13px; }
+}
+
+/* Version 7.0: lebendiger RTW – bewusst sehr dezentes Wackeln im Ruhezustand */
+.timeline-ambulance { animation: ambulance-idle 3.2s ease-in-out infinite; transform-origin: 50% 75%; }
+.timeline-ambulance-button.boosting .timeline-ambulance { animation: ambulance-grow .9s ease-out; }
+.timeline-dust-1 { width: 14px; height: 14px; }
+.timeline-dust-2 { width: 18px; height: 18px; }
+.timeline-dust-3 { width: 11px; height: 11px; }
+.timeline-ambulance-button.boosting .timeline-dust-1 { animation: dust-big-1 .85s ease-out; }
+.timeline-ambulance-button.boosting .timeline-dust-2 { animation: dust-big-2 .9s ease-out .03s; }
+.timeline-ambulance-button.boosting .timeline-dust-3 { animation: dust-big-3 .82s ease-out .08s; }
+@keyframes ambulance-idle {
+  0%, 100% { transform: scaleX(-1) rotate(-.35deg) translateY(0); }
+  50% { transform: scaleX(-1) rotate(.35deg) translateY(-.7px); }
+}
+@keyframes ambulance-grow {
+  0% { transform: scaleX(-1) scale(1); }
+  18% { transform: scaleX(-1) scale(1.24); }
+  55% { transform: scaleX(-1) scale(1.13); }
+  100% { transform: scaleX(-1) scale(1); }
+}
+@keyframes dust-big-1 {
+  0% { opacity: 0; transform: translate(0,-50%) scale(.2); }
+  20% { opacity: .78; transform: translate(-13px,-62%) scale(.9); }
+  100% { opacity: 0; transform: translate(-42px,-76%) scale(1.9); }
+}
+@keyframes dust-big-2 {
+  0% { opacity: 0; transform: translate(0,-50%) scale(.2); }
+  20% { opacity: .65; transform: translate(-12px,-38%) scale(.85); }
+  100% { opacity: 0; transform: translate(-38px,-20%) scale(1.75); }
+}
+@keyframes dust-big-3 {
+  0% { opacity: 0; transform: translate(0,-50%) scale(.2); }
+  18% { opacity: .58; transform: translate(-9px,-50%) scale(.75); }
+  100% { opacity: 0; transform: translate(-32px,-48%) scale(1.55); }
+}

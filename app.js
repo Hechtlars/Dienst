@@ -3,7 +3,17 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '6.9';
+const APP_VERSION = '7.0';
+const DEFAULT_DUTY_TIMES = {
+  0: { start: '08:30', end: '07:15' }, // Sonntag
+  1: { start: '07:15', end: '07:15' }, // Montag
+  2: { start: '07:15', end: '07:15' }, // Dienstag
+  3: { start: '07:15', end: '07:15' }, // Mittwoch
+  4: { start: '07:15', end: '07:15' }, // Donnerstag
+  5: { start: '07:15', end: '08:30' }, // Freitag
+  6: { start: '08:30', end: '08:30' }  // Samstag
+};
+const WEEKDAY_NAMES = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
@@ -36,6 +46,7 @@ for (const button of document.querySelectorAll('.tab')) {
   });
 }
 document.getElementById('menuButton').addEventListener('click', openMenu);
+document.getElementById('homeButton').addEventListener('click', goHome);
 importInput.addEventListener('change', importBackup);
 updateButton.addEventListener('click', applyUpdate);
 backupReminderButton.addEventListener('click', openBackupMenu);
@@ -57,9 +68,18 @@ function normalizeSettings(settings = {}) {
   if (!rateHistory.length) rateHistory = [{ validFrom: '1900-01-01', workHourlyRate, allowanceHourlyRate }];
   rateHistory.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
   const latest = rateHistory[rateHistory.length - 1];
+  const dutyTimes = {};
+  for (let day = 0; day < 7; day++) {
+    const candidate = settings.dutyTimes?.[day] || settings.dutyTimes?.[String(day)] || DEFAULT_DUTY_TIMES[day];
+    const validStart = /^\d{2}:\d{2}$/.test(candidate?.start || '') ? candidate.start : DEFAULT_DUTY_TIMES[day].start;
+    const validEnd = /^\d{2}:\d{2}$/.test(candidate?.end || '') ? candidate.end : DEFAULT_DUTY_TIMES[day].end;
+    dutyTimes[day] = { start: validStart, end: validEnd };
+  }
   return {
     showPay: Boolean(settings.showPay),
     showTimeline: Boolean(settings.showTimeline),
+    showCustomDutyTimes: Boolean(settings.showCustomDutyTimes),
+    dutyTimes,
     workHourlyRate: latest.workHourlyRate,
     allowanceHourlyRate: latest.allowanceHourlyRate,
     rateHistory
@@ -74,14 +94,18 @@ function pad(n) { return String(n).padStart(2, '0'); }
 function localDateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
 function parseLocalDate(key) { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); }
 function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
+function timeParts(value) {
+  const [hour, minute] = String(value).split(':').map(Number);
+  return { hour: Number.isFinite(hour) ? hour : 0, minute: Number.isFinite(minute) ? minute : 0 };
+}
 function dutySchedule(dateKey) {
   const date = parseLocalDate(dateKey);
   const weekday = date.getDay();
-  let startHour = 7, startMinute = 15, endHour = 7, endMinute = 15;
-  if (weekday === 5) { endHour = 8; endMinute = 30; }
-  else if (weekday === 6) { startHour = 8; startMinute = 30; endHour = 8; endMinute = 30; }
-  else if (weekday === 0) { startHour = 8; startMinute = 30; }
-  return { startHour, startMinute, endHour, endMinute };
+  const source = state.settings?.showCustomDutyTimes ? state.settings.dutyTimes?.[weekday] : DEFAULT_DUTY_TIMES[weekday];
+  const fallback = DEFAULT_DUTY_TIMES[weekday];
+  const start = timeParts(source?.start || fallback.start);
+  const end = timeParts(source?.end || fallback.end);
+  return { startHour: start.hour, startMinute: start.minute, endHour: end.hour, endMinute: end.minute };
 }
 function dutyStart(duty) {
   const date = parseLocalDate(duty.date);
@@ -275,6 +299,13 @@ function render() {
   else if (selectedDutyId) renderDutyDetail(selectedDutyId);
   else renderMonth();
 }
+function goHome() {
+  if (modal.open) modal.close();
+  currentView = 'dienst';
+  selectedDutyId = null;
+  for (const tab of document.querySelectorAll('.tab')) tab.classList.toggle('active', tab.dataset.view === 'dienst');
+  renderDuty();
+}
 
 // iOS kann eine installierte Web-App im Hintergrund einfrieren und beim Öffnen
 // exakt an derselben Stelle fortsetzen. Deshalb prüfen wir zeitabhängige Ansichten
@@ -456,22 +487,59 @@ function entryRow(duty, entry, withDelete) {
 function haptic() {
   if (navigator.vibrate) navigator.vibrate(12);
 }
+let undoTimer = null;
+function showUndoToast(message, undoAction) {
+  const toast = document.getElementById('undoToast');
+  const text = document.getElementById('undoToastText');
+  const button = document.getElementById('undoToastButton');
+  if (!toast || !text || !button) return;
+  clearTimeout(undoTimer);
+  text.textContent = message;
+  toast.hidden = false;
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  button.onclick = () => {
+    clearTimeout(undoTimer);
+    undoAction();
+    toast.classList.remove('visible');
+    setTimeout(() => { toast.hidden = true; }, 220);
+  };
+  undoTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => { toast.hidden = true; }, 220);
+  }, 8000);
+}
 function deleteDutyById(id) {
   if (!confirm('Diesen Dienst mit allen Einsätzen löschen?')) return;
-  state.duties = state.duties.filter(item => item.id !== id);
+  const index = state.duties.findIndex(item => item.id === id);
+  if (index < 0) return;
+  const [removed] = state.duties.splice(index, 1);
   saveState();
   if (selectedDutyId === id) selectedDutyId = null;
   haptic();
   render();
+  showUndoToast('Dienst gelöscht', () => {
+    state.duties.splice(Math.min(index, state.duties.length), 0, removed);
+    saveState();
+    haptic();
+    render();
+  });
 }
 function deleteEntryById(dutyId, entryId) {
   if (!confirm('Einsatz löschen?')) return;
   const duty = state.duties.find(item => item.id === dutyId);
   if (!duty) return;
-  duty.entries = duty.entries.filter(entry => entry.id !== entryId);
+  const index = duty.entries.findIndex(entry => entry.id === entryId);
+  if (index < 0) return;
+  const [removed] = duty.entries.splice(index, 1);
   saveState();
   haptic();
   render();
+  showUndoToast('Einsatz gelöscht', () => {
+    duty.entries.splice(Math.min(index, duty.entries.length), 0, removed);
+    saveState();
+    haptic();
+    render();
+  });
 }
 function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
   const content = item.querySelector('.swipe-content');
@@ -764,6 +832,16 @@ function openMenu() {
       <input id="showTimelineToggle" class="switch-input" type="checkbox" ${settings.showTimeline ? 'checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
     </label>
+    <label class="settings-toggle-row">
+      <span><strong>Individuelle Dienstzeiten</strong><small>Start- und Endzeit für jeden Wochentag selbst festlegen</small></span>
+      <input id="showCustomDutyTimesToggle" class="switch-input" type="checkbox" ${settings.showCustomDutyTimes ? 'checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <div id="dutyTimeSettings" class="duty-time-settings" ${settings.showCustomDutyTimes ? '' : 'hidden'}>
+      <div class="small-note">Die Endzeit gilt jeweils für den Folgetag. Änderungen wirken auf die Dienstzeiten des gewählten Wochentags.</div>
+      ${[1,2,3,4,5,6,0].map(day => `<div class="weekday-time-row"><strong>${WEEKDAY_NAMES[day]}</strong><label><span>Start</span><input id="dutyStart-${day}" type="time" value="${settings.dutyTimes[day].start}"></label><label><span>Ende</span><input id="dutyEnd-${day}" type="time" value="${settings.dutyTimes[day].end}"></label></div>`).join('')}
+      <button type="button" class="primary settings-save" id="saveDutyTimeSettings">Dienstzeiten speichern</button>
+    </div>
     <div id="paySettings" class="pay-settings" ${settings.showPay ? '' : 'hidden'}>
       <label class="field"><span>Stundenlohn Bereitschaftsdienst</span><div class="money-input"><input id="workHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.workHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
       <label class="field"><span>Stundenlohn für Dienstpauschale</span><div class="money-input"><input id="allowanceHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.allowanceHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
@@ -786,6 +864,33 @@ function openMenu() {
   timelineToggle.onchange = () => {
     state.settings.showTimeline = timelineToggle.checked;
     saveState();
+    render();
+  };
+  const customDutyTimesToggle = document.getElementById('showCustomDutyTimesToggle');
+  const dutyTimeSettings = document.getElementById('dutyTimeSettings');
+  customDutyTimesToggle.onchange = () => {
+    dutyTimeSettings.hidden = !customDutyTimesToggle.checked;
+    if (!customDutyTimesToggle.checked) {
+      state.settings.showCustomDutyTimes = false;
+      saveState();
+      render();
+    }
+  };
+  document.getElementById('saveDutyTimeSettings').onclick = () => {
+    const dutyTimes = {};
+    for (let day = 0; day < 7; day++) {
+      const startValue = document.getElementById(`dutyStart-${day}`).value;
+      const endValue = document.getElementById(`dutyEnd-${day}`).value;
+      if (!/^\d{2}:\d{2}$/.test(startValue) || !/^\d{2}:\d{2}$/.test(endValue)) {
+        alert(`Bitte gültige Start- und Endzeiten für ${WEEKDAY_NAMES[day]} eingeben.`);
+        return;
+      }
+      dutyTimes[day] = { start: startValue, end: endValue };
+    }
+    state.settings = normalizeSettings({ ...state.settings, showCustomDutyTimes: customDutyTimesToggle.checked, dutyTimes });
+    saveState();
+    haptic();
+    modal.close();
     render();
   };
   toggle.onchange = () => {

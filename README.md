@@ -41,3 +41,11 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Berichtsvorschau mit Zurück-zur-App-Button und separatem PDF/Drucken-Button.
 - Optionaler Zeitstrahl unter dem aktuellen Dienst; Krankenwagen zeigt den Fortschritt.
 - Zeitstrahl unter ••• ein-/ausschaltbar.
+
+
+## Version 7.0
+- Individuelle Dienstzeiten pro Wochentag über das •••-Menü ein-/ausschaltbar.
+- 8 Sekunden Rückgängig nach Löschen von Diensten oder Einsätzen.
+- RTW oben links führt zur Seite Aktueller Bereitschaftsdienst.
+- Zeitstrahl-RTW: größere Staubwolke, größer beim Antippen und minimales Wackeln im Ruhezustand.
+- Service-Worker-Cache auf Version 7.0 aktualisiert.
