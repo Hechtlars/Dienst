@@ -34,7 +34,10 @@
 
     <div id="backupReminder" class="notice backup-notice" hidden>
       <span>Bitte eine lokale Sicherung erstellen.</span>
-      <button id="backupReminderButton" type="button">Sichern</button>
+      <div class="backup-notice-actions">
+        <button id="backupReminderButton" type="button">Sichern</button>
+        <button id="backupReminderDismiss" class="notice-dismiss" type="button" aria-label="Erinnerung schließen">×</button>
+      </div>
     </div>
 
     <main id="mainContent"></main>

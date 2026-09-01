@@ -355,3 +355,10 @@ dialog.action-sheet-open button {
   18% { opacity: .58; transform: translate(-9px,-50%) scale(.75); }
   100% { opacity: 0; transform: translate(-32px,-48%) scale(1.55); }
 }
+
+.backup-notice-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.backup-notice .notice-dismiss{width:32px;height:32px;padding:0;border-radius:50%;font-size:22px;line-height:30px;background:rgba(96,70,0,.10);color:#604600}
+.backup-title{display:flex;align-items:center;justify-content:center;gap:9px}
+.info-button{width:28px;height:28px;padding:0;border:2px solid var(--accent);border-radius:50%;background:transparent;color:var(--accent);font-size:17px;font-weight:800;font-family:Georgia,serif;line-height:24px}
+.backup-info-text{margin:4px 0 18px;padding:14px 15px;border-radius:14px;background:rgba(120,120,128,.09);color:var(--secondary);font-size:14px;line-height:1.45}
+.backup-info-text p{margin:0 0 12px}.backup-info-text p:last-child{margin-bottom:0}.backup-info-text strong{color:var(--text)}

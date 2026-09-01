@@ -3,7 +3,8 @@
 const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
-const APP_VERSION = '7.0';
+const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
+const APP_VERSION = '7.1';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -29,6 +30,7 @@ const updateBanner = document.getElementById('updateBanner');
 const updateButton = document.getElementById('updateButton');
 const backupReminder = document.getElementById('backupReminder');
 const backupReminderButton = document.getElementById('backupReminderButton');
+const backupReminderDismiss = document.getElementById('backupReminderDismiss');
 
 const nativeShowModal = modal.showModal.bind(modal);
 modal.showModal = () => {
@@ -50,6 +52,10 @@ document.getElementById('homeButton').addEventListener('click', goHome);
 importInput.addEventListener('change', importBackup);
 updateButton.addEventListener('click', applyUpdate);
 backupReminderButton.addEventListener('click', openBackupMenu);
+backupReminderDismiss.addEventListener('click', () => {
+  localStorage.setItem(BACKUP_DISMISSED_KEY, new Date().toISOString());
+  backupReminder.hidden = true;
+});
 
 function loadState() {
   try {
@@ -284,7 +290,8 @@ function daysSince(dateString) {
 function showBackupReminder() {
   const hasData = state.duties.some(duty => duty.entries.length > 0);
   const overdue = daysSince(localStorage.getItem(BACKUP_DATE_KEY)) >= BACKUP_REMINDER_DAYS;
-  backupReminder.hidden = !(hasData && overdue);
+  const dismissedRecently = daysSince(localStorage.getItem(BACKUP_DISMISSED_KEY)) < BACKUP_REMINDER_DAYS;
+  backupReminder.hidden = !(hasData && overdue && !dismissedRecently);
 }
 
 let waitingWorker = null;
@@ -928,7 +935,7 @@ function openMenu() {
 }
 function openBackupMenu() {
   modalContent.innerHTML = `<div class="modal-body">
-    <div class="modal-title">Datensicherung</div>
+    <div class="modal-title backup-title">Datensicherung <button type="button" class="info-button" id="backupInfo" aria-label="Information zur Datensicherung">i</button></div>
     <button type="button" class="secondary-button" id="exportBackup">Sicherung exportieren</button>
     <button type="button" class="secondary-button" id="importBackup">Sicherung importieren</button>
     <div class="small-note">Die Sicherungsdatei wird von dir selbst gespeichert. Es erfolgt kein automatischer Cloud-Upload.</div>
@@ -937,11 +944,26 @@ function openBackupMenu() {
   modal.showModal();
   document.getElementById('exportBackup').onclick = exportBackup;
   document.getElementById('importBackup').onclick = () => { modal.close(); importInput.click(); };
+  document.getElementById('backupInfo').onclick = openBackupInfo;
+}
+function openBackupInfo() {
+  modalContent.innerHTML = `<div class="modal-body">
+    <div class="modal-title">Wie funktioniert die Sicherung?</div>
+    <div class="backup-info-text">
+      <p><strong>Automatisch gespeichert:</strong> Deine Dienste und Einsätze werden beim Speichern automatisch lokal auf diesem Gerät abgelegt.</p>
+      <p><strong>Sicherung exportieren:</strong> Erstellt zusätzlich eine Sicherungsdatei. Du entscheidest selbst, wo du sie speicherst. Es gibt keinen automatischen Cloud-Upload.</p>
+      <p><strong>Sicherung importieren:</strong> Damit kannst du deine Daten nach einem Verlust der lokalen Daten oder auf einem anderen Gerät wiederherstellen.</p>
+    </div>
+    <button type="button" class="secondary-button" id="backToBackup">Zurück</button>
+    <button class="secondary-button">Schließen</button>
+  </div>`;
+  document.getElementById('backToBackup').onclick = openBackupMenu;
 }
 function exportBackup() {
   const backup = { version: APP_VERSION, exportedAt: new Date().toISOString(), duties: state.duties, settings: state.settings };
   downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `Dienst-Sicherung-${localDateKey(new Date())}.json`);
   localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
+  localStorage.removeItem(BACKUP_DISMISSED_KEY);
   showBackupReminder();
   modal.close();
 }
