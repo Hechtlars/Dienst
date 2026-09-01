@@ -390,9 +390,18 @@ function renderMonth() {
       <button id="nextMonth" type="button" aria-label="Nächster Monat">›</button>
     </div>
     <section class="month-summary">
-      <div class="month-stat"><div class="month-stat-label">Telefonisch</div><div class="month-stat-value">${totals.phoneHours} Std.</div></div>
-      <div class="month-stat"><div class="month-stat-label">Im Haus</div><div class="month-stat-value">${totals.houseHours} Std.</div></div>
-      <div class="month-stat"><div class="month-stat-label">Gesamt</div><div class="month-stat-value">${totalHours} Std.</div></div>
+      <div class="month-stat">
+        <div class="month-stat-label">Dienste</div>
+        <div class="month-stat-value">${duties.length}</div>
+      </div>
+      <div class="month-stat">
+        <div class="month-stat-label">Stunden</div>
+        <div class="month-stat-value">${totalHours} Std.</div>
+      </div>
+      <div class="month-stat">
+        <div class="month-stat-label">Aufteilung</div>
+        <div class="month-stat-breakdown"><span>Telefonisch <strong>${totals.phoneHours} Std.</strong></span><span>Im Haus <strong>${totals.houseHours} Std.</strong></span></div>
+      </div>
     </section>
     ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div></section>` : ''}
     <div class="month-actions">

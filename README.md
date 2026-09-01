@@ -49,3 +49,8 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - RTW oben links führt zur Seite Aktueller Bereitschaftsdienst.
 - Zeitstrahl-RTW: größere Staubwolke, größer beim Antippen und minimales Wackeln im Ruhezustand.
 - Service-Worker-Cache auf Version 7.0 aktualisiert.
+
+
+## Version 7.2
+- Monatsübersicht neu sortiert: Dienste, Gesamtstunden und Aufteilung Telefonisch/Im Haus.
+- Untere Navigation: „Monat“ heißt jetzt „Übersicht“.

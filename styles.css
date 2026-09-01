@@ -362,3 +362,7 @@ dialog.action-sheet-open button {
 .info-button{width:28px;height:28px;padding:0;border:2px solid var(--accent);border-radius:50%;background:transparent;color:var(--accent);font-size:17px;font-weight:800;font-family:Georgia,serif;line-height:24px}
 .backup-info-text{margin:4px 0 18px;padding:14px 15px;border-radius:14px;background:rgba(120,120,128,.09);color:var(--secondary);font-size:14px;line-height:1.45}
 .backup-info-text p{margin:0 0 12px}.backup-info-text p:last-child{margin-bottom:0}.backup-info-text strong{color:var(--text)}
+
+.month-stat-breakdown{display:flex;flex-direction:column;gap:4px;margin-top:5px;font-size:12px;line-height:1.25;color:var(--secondary)}
+.month-stat-breakdown span{display:flex;justify-content:space-between;gap:7px;white-space:nowrap}
+.month-stat-breakdown strong{color:var(--text);font-weight:800}
