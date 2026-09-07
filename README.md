@@ -54,3 +54,9 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 ## Version 7.2
 - Monatsübersicht neu sortiert: Dienste, Gesamtstunden und Aufteilung Telefonisch/Im Haus.
 - Untere Navigation: „Monat“ heißt jetzt „Übersicht“.
+
+
+## Version 7.3
+- Neues optionales Feld „Patienten-ID“ bei Einsatz erfassen und bearbeiten.
+- Patienten-ID wird in Einsatzübersicht, CSV und PDF-Bericht ausgegeben.
+- „Stundenlohn anzeigen“ und „Zeitstrahl anzeigen“ sind unter „Erweiterte Optionen“ versteckt.

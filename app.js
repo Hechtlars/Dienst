@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.1';
+const APP_VERSION = '7.3';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -492,6 +492,7 @@ function entryRow(duty, entry, withDelete) {
       <div class="row-main">
         <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
         <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
+        ${entry.patientId ? `<div class="entry-note">Patienten-ID: ${escapeHtml(entry.patientId)}</div>` : ''}
         ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
       </div>
       <div class="row-value">${minutes(entry)} Min.</div>
@@ -761,6 +762,7 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
+    <label class="field"><span>Patienten-ID (optional)</span><input id="entryPatientId" type="text" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="z. B. 12345"></label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP"></textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div>
@@ -776,6 +778,7 @@ function openNewEntry(dutyId) {
     const date = document.getElementById('entryDate').value;
     const startTime = document.getElementById('entryStart').value;
     const endTime = document.getElementById('entryEnd').value;
+    const patientId = document.getElementById('entryPatientId').value.trim();
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError');
     error.textContent = '';
@@ -785,7 +788,7 @@ function openNewEntry(dutyId) {
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
     if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
-    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), note });
+    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), patientId, note });
     saveState();
     modal.close();
     render();
@@ -804,6 +807,7 @@ function openEditEntry(dutyId, entryId) {
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(start)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(start.getHours())}:${pad(start.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(end.getHours())}:${pad(end.getMinutes())}"></label>
+    <label class="field"><span>Patienten-ID (optional)</span><input id="entryPatientId" type="text" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="z. B. 12345" value="${escapeHtml(entry.patientId || '')}"></label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP">${escapeHtml(entry.note || '')}</textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
@@ -817,6 +821,7 @@ function openEditEntry(dutyId, entryId) {
     const date = document.getElementById('entryDate').value;
     const startTime = document.getElementById('entryStart').value;
     const endTime = document.getElementById('entryEnd').value;
+    const patientId = document.getElementById('entryPatientId').value.trim();
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError'); error.textContent = '';
     if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
@@ -824,7 +829,7 @@ function openEditEntry(dutyId, entryId) {
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
     if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
-    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), note });
+    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), patientId, note });
     saveState(); haptic(); modal.close(); render();
   };
 }
@@ -837,22 +842,27 @@ function openMenu() {
   const settings = state.settings || normalizeSettings();
   modalContent.innerHTML = `<div class="modal-body">
     <div class="modal-title">Mehr</div>
-    <div class="modal-section-title">Anzeige</div>
-    <label class="settings-toggle-row">
-      <span><strong>Stundenlohn anzeigen</strong><small>Vergütung pro Dienst und Monat berechnen</small></span>
-      <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
-      <span class="switch" aria-hidden="true"></span>
-    </label>
-    <label class="settings-toggle-row">
-      <span><strong>Zeitstrahl anzeigen</strong><small>Fortschritt des aktuellen Bereitschaftsdienstes mit Krankenwagen anzeigen</small></span>
-      <input id="showTimelineToggle" class="switch-input" type="checkbox" ${settings.showTimeline ? 'checked' : ''}>
-      <span class="switch" aria-hidden="true"></span>
-    </label>
+    <div class="modal-section-title">Einstellungen</div>
     <label class="settings-toggle-row">
       <span><strong>Individuelle Dienstzeiten</strong><small>Start- und Endzeit für jeden Wochentag selbst festlegen</small></span>
       <input id="showCustomDutyTimesToggle" class="switch-input" type="checkbox" ${settings.showCustomDutyTimes ? 'checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
     </label>
+    <button type="button" class="advanced-options-button" id="advancedOptionsButton" aria-expanded="false">
+      <span>Erweiterte Optionen</span><span class="advanced-options-chevron">›</span>
+    </button>
+    <div id="advancedOptions" class="advanced-options" hidden>
+      <label class="settings-toggle-row">
+        <span><strong>Stundenlohn anzeigen</strong><small>Optionale Vergütungsberechnung</small></span>
+        <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="settings-toggle-row">
+        <span><strong>Zeitstrahl anzeigen</strong><small>Optionale Fortschrittsanzeige des aktuellen Dienstes</small></span>
+        <input id="showTimelineToggle" class="switch-input" type="checkbox" ${settings.showTimeline ? 'checked' : ''}>
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+    </div>
     <div id="dutyTimeSettings" class="duty-time-settings" ${settings.showCustomDutyTimes ? '' : 'hidden'}>
       <div class="small-note">Die Endzeit gilt jeweils für den Folgetag. Änderungen wirken auf die Dienstzeiten des gewählten Wochentags.</div>
       ${[1,2,3,4,5,6,0].map(day => `<div class="weekday-time-row"><strong>${WEEKDAY_NAMES[day]}</strong><label><span>Start</span><input id="dutyStart-${day}" type="time" value="${settings.dutyTimes[day].start}"></label><label><span>Ende</span><input id="dutyEnd-${day}" type="time" value="${settings.dutyTimes[day].end}"></label></div>`).join('')}
@@ -874,6 +884,14 @@ function openMenu() {
     <button class="secondary-button">Schließen</button>
   </div>`;
   modal.showModal();
+  const advancedOptionsButton = document.getElementById('advancedOptionsButton');
+  const advancedOptions = document.getElementById('advancedOptions');
+  advancedOptionsButton.onclick = () => {
+    const willOpen = advancedOptions.hidden;
+    advancedOptions.hidden = !willOpen;
+    advancedOptionsButton.setAttribute('aria-expanded', String(willOpen));
+    advancedOptionsButton.classList.toggle('open', willOpen);
+  };
   const toggle = document.getElementById('showPayToggle');
   const paySettings = document.getElementById('paySettings');
   const timelineToggle = document.getElementById('showTimelineToggle');
@@ -1006,14 +1024,14 @@ function csvEscape(value) {
 function exportMonthCsv() {
   const duties = monthDuties().slice().reverse();
   if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
-  const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Bemerkung', 'Gerundete Stunden je Dienstart']];
+  const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Patienten-ID', 'Bemerkung', 'Gerundete Stunden je Dienstart']];
   for (const duty of duties) {
     const rounded = { 'Telefonisch': roundedHours(sum(duty, 'Telefonisch')), 'Im Haus': roundedHours(sum(duty, 'Im Haus')) };
-    if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '0']);
+    if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '', '0']);
     for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
       const start = new Date(entry.start);
       const end = new Date(entry.end);
-      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.note || '', rounded[entry.type]]);
+      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.patientId || '', entry.note || '', rounded[entry.type]]);
     }
   }
   const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(';')).join('\r\n');
@@ -1030,13 +1048,13 @@ function printMonthReport() {
     const entryRows = entries.length ? entries.map(entry => {
       const entryStart = new Date(entry.start);
       const entryEnd = new Date(entry.end);
-      return `<tr><td>${escapeHtml(entry.type)}</td><td>${fmtDate(entryStart)}</td><td>${fmtTime(entryStart)}</td><td>${fmtTime(entryEnd)}</td><td>${minutes(entry)} Min.</td><td>${escapeHtml(entry.note || '–')}</td></tr>`;
-    }).join('') : '<tr><td colspan="6" class="muted">Keine Einsätze erfasst</td></tr>';
+      return `<tr><td>${escapeHtml(entry.type)}</td><td>${fmtDate(entryStart)}</td><td>${fmtTime(entryStart)}</td><td>${fmtTime(entryEnd)}</td><td>${minutes(entry)} Min.</td><td>${escapeHtml(entry.patientId || '–')}</td><td>${escapeHtml(entry.note || '–')}</td></tr>`;
+    }).join('') : '<tr><td colspan="7" class="muted">Keine Einsätze erfasst</td></tr>';
     const pay = state.settings.showPay ? dutyPay(duty) : null;
     return `<section class="duty-block">
       <div class="duty-heading"><div><h2>${fmtDate(dutyStart(duty))}</h2><div class="muted">${dutyTimeText(duty)}</div></div><div class="duty-total">${roundedHours(phoneMinutes) + roundedHours(houseMinutes)} Std.</div></div>
       <div class="duty-summary"><span>Telefonisch: <strong>${phoneMinutes} Min. / ${roundedHours(phoneMinutes)} Std.</strong></span><span>Im Haus: <strong>${houseMinutes} Min. / ${roundedHours(houseMinutes)} Std.</strong></span>${pay ? `<span>Vergütung: <strong>${fmtMoney(pay.total)}</strong></span>` : ''}</div>
-      <table class="entries"><thead><tr><th>Art</th><th>Datum</th><th>Beginn</th><th>Ende</th><th>Dauer</th><th>Bemerkung</th></tr></thead><tbody>${entryRows}</tbody></table>
+      <table class="entries"><thead><tr><th>Art</th><th>Datum</th><th>Beginn</th><th>Ende</th><th>Dauer</th><th>Patienten-ID</th><th>Bemerkung</th></tr></thead><tbody>${entryRows}</tbody></table>
     </section>`;
   }).join('');
   const report = window.open('', '_blank');
