@@ -187,3 +187,19 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Mehrere OCR-Modi und Bildvarianten werden verglichen.
 - Eine Patienten-ID wird nur angeboten, wenn mehrere unabhängige OCR-Durchläufe dieselbe vollständige Zahlenfolge liefern.
 - Die Vorschau zeigt nun den engsten Zahlenbereich, der tatsächlich zuerst ausgewertet wird.
+
+
+## Version 7.21
+- Versions- und Cache-Bump auf 7.21.
+- Scanner-Funktion entspricht technisch Version 7.20.
+- Keine zusätzlichen funktionalen Änderungen.
+
+
+## Version 7.22
+- Behebt das Hängenbleiben bei „Patienten-ID wird lokal erkannt …“.
+- Jeder einzelne Tesseract-Erkennungslauf hat jetzt einen harten Timeout von 12 Sekunden.
+- Der Foto-Button wird nach Erfolg, Fehler oder Timeout zuverlässig wieder freigegeben.
+- Weniger OCR-Durchläufe pro Aufnahme, damit iPhone/Safari nicht unnötig lange blockiert wird.
+- Engerer, sauberer zentrierter Zahlenbereich.
+- PSM 13 bleibt Hauptmodus; PSM 8 wird nur noch als begrenzter Fallback genutzt.
+- Der Scanner kann auch nach einem fehlgeschlagenen OCR-Versuch geschlossen werden.

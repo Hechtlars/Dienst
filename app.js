@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.20';
+const APP_VERSION = '7.22';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -1028,6 +1028,16 @@ function showPatientOcrPreviewFromCanvas(canvas) {
   }
 }
 
+
+function patientOcrRecognizeWithTimeout(worker, image, timeoutMs = 12000) {
+  return Promise.race([
+    worker.recognize(image),
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error('OCR-Zeitüberschreitung')), timeoutMs);
+    })
+  ]);
+}
+
 async function capturePatientIdStill() {
   if (patientScanBusy || !patientOcrWorker) return;
 
@@ -1105,12 +1115,9 @@ async function capturePatientIdStill() {
     // haben Tesseract bisher irritiert. Deshalb werden zuerst mehrere ENGE,
     // mittig liegende Zahlenfenster untersucht. Erst danach folgt ein breiter Fallback.
     const regions = [
-      { name: 'digits-tight',  dx: 0.00, dy: 0.00, scaleX: 0.46, scaleY: 0.58 },
-      { name: 'digits-medium', dx: 0.00, dy: 0.00, scaleX: 0.56, scaleY: 0.64 },
-      { name: 'digits-wide',   dx: 0.00, dy: 0.00, scaleX: 0.66, scaleY: 0.70 },
-      { name: 'digits-left',   dx:-0.035, dy:0.00, scaleX:0.58, scaleY:0.66 },
-      { name: 'digits-right',  dx: 0.035, dy:0.00, scaleX:0.58, scaleY:0.66 },
-      { name: 'fallback',      dx: 0.00, dy: 0.00, scaleX: 0.86, scaleY: 0.78 }
+      { name: 'digits-tight',  dx: 0.00,  dy: 0.00, scaleX: 0.42, scaleY: 0.56 },
+      { name: 'digits-medium', dx: 0.00,  dy: 0.00, scaleX: 0.50, scaleY: 0.62 },
+      { name: 'digits-left',   dx:-0.025, dy: 0.00, scaleX: 0.50, scaleY: 0.62 }
     ];
 
     const extractPatientId = (text) => {
@@ -1137,7 +1144,7 @@ async function capturePatientIdStill() {
         user_defined_dpi: '300'
       });
 
-      const result = await patientOcrWorker.recognize(canvas);
+      const result = await patientOcrRecognizeWithTimeout(patientOcrWorker, canvas, 12000);
       const raw = String(result?.data?.text || '').trim();
       const id = extractPatientId(raw);
       const confidence = Number(result?.data?.confidence || 0);
@@ -1189,8 +1196,11 @@ async function capturePatientIdStill() {
         const v = Math.max(0, Math.min(255, (g - 128) * 1.25 + 128));
         gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
       }
-      await runPass(gray, 13, region.name, 'gray');
-      await runPass(gray, 8, region.name, 'gray');
+      try {
+        await runPass(gray, 13, region.name, 'gray');
+      } catch (error) {
+        console.debug('OCR-Pass abgebrochen:', error);
+      }
 
       // Variante 2: adaptiv etwas hellere Schwelle
       const bw = new ImageData(
@@ -1211,7 +1221,11 @@ async function capturePatientIdStill() {
         const v = g > threshold ? 255 : 0;
         bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
       }
-      await runPass(bw, 8, region.name, 'bw');
+      try {
+        await runPass(bw, 8, region.name, 'bw');
+      } catch (error) {
+        console.debug('OCR-Pass abgebrochen:', error);
+      }
 
       // Kandidaten nur übernehmen, wenn mehrere unabhängige Durchläufe dieselbe
       // komplette ID liefern. Ein einzelner Treffer reicht bei Patienten-IDs nicht.
@@ -1247,7 +1261,7 @@ async function capturePatientIdStill() {
     }
 
     if (status) {
-      status.textContent = 'Keine eindeutige ID erkannt. Prüfe den angezeigten Zahlenbereich: Ist dort nur die vollständige ID scharf zu sehen?';
+      status.textContent = 'Keine eindeutige ID erkannt. Du kannst sofort erneut erfassen oder den Scanner schließen.';
     }
   } catch (error) {
     console.warn('Foto-OCR fehlgeschlagen', error);
