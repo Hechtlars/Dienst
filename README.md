@@ -105,3 +105,9 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Die Maske „Einsatz erfassen/bearbeiten“ bleibt darunter erhalten, kann den Scanner aber nicht mehr überdecken.
 - Nach Erkennung oder Abbruch erscheint das Einsatzformular wieder mit den bisherigen Eingaben.
 - Die Raute am Patienten-ID-Feld wurde durch ein schlichtes monochromes Kamera-Symbol ersetzt.
+
+
+## Version 7.10
+- Im •••-/Mehr-Menü wird ganz unten die aktuell geladene App-Version angezeigt.
+- Beispiel: „Dienst · Version 7.10“.
+- Damit lässt sich nach einem GitHub-Update direkt prüfen, ob das Gerät bereits die neue Version geladen hat.

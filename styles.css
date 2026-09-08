@@ -433,3 +433,12 @@ dialog.patient-scanner-overlay{
 dialog.patient-scanner-overlay::backdrop{background:#000}
 dialog.patient-scanner-overlay[open]{display:flex;align-items:stretch;justify-content:center}
 dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:100dvh}
+
+.app-version-label{
+  margin:18px 0 8px;
+  text-align:center;
+  font-size:12px;
+  line-height:1.3;
+  color:var(--secondary);
+  opacity:.72;
+}

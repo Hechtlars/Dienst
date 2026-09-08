@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.9';
+const APP_VERSION = '7.10';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -1149,6 +1149,7 @@ function openMenu() {
     <button type="button" class="secondary-button" id="openBackup">Datensicherung</button>
     <div class="modal-section-title">Hinweis</div>
     <div class="privacy-note"><span aria-hidden="true">🔒</span><span>Auch die Lohnangaben werden ausschließlich lokal auf diesem Gerät gespeichert und nicht an GitHub oder einen Server übertragen.</span></div>
+    <div class="app-version-label">Dienst · Version ${APP_VERSION}</div>
     <button class="secondary-button">Schließen</button>
   </div>`;
   modal.showModal();
