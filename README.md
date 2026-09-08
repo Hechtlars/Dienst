@@ -81,3 +81,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Patienten-ID wieder optional.
 - Ein Einsatz kann ohne Patienten-ID gespeichert werden.
 - Wird eine Patienten-ID eingetragen oder gescannt, muss sie aus mindestens 9 Ziffern bestehen.
+
+
+## Version 7.7
+- Auch bei vergangenen Diensten können nachträglich Einsätze hinzugefügt werden.
+- In der Detailansicht eines früheren Dienstes gibt es nun direkt „+ Einsatz hinzufügen“.
+- Bereits vorhandene Einsätze können weiterhin durch Antippen bzw. über das Kontextmenü bearbeitet werden.
+- Beim nachträglichen Hinzufügen werden Datum und Uhrzeit weiterhin gegen den Zeitraum des ausgewählten Dienstes geprüft.

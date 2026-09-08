@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.6';
+const APP_VERSION = '7.7';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -444,7 +444,7 @@ function renderDutyDetail(id) {
   const houseHours = roundedHours(houseMinutes);
   const totalHours = phoneHours + houseHours;
   main.innerHTML = `
-    <button class="text-button" id="backMonth" type="button">‹ Zurück zum Monat</button>
+    <button class="text-button" id="backMonth" type="button">‹ Zurück zur Übersicht</button>
     <section class="card hero">
       <div class="hero-kicker">Bereitschaftsdienst</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
@@ -457,13 +457,15 @@ function renderDutyDetail(id) {
       <div class="row total-row"><div class="row-main"><div class="row-title">Gesamt</div><div class="row-subtitle">Summe der beiden gerundeten Werte</div></div><div class="row-value total-value">${hourLabel(totalHours)}</div></div>
     </section>
     <div class="card-header">Einsätze</div>
-    <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Keine Einsätze</div>'}</section>
+    <button class="primary" id="newHistoricalEntry" type="button">+ Einsatz hinzufügen</button>
+    <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
     ${state.settings.showPay ? payDetailCard(duty) : ''}
     <div class="detail-actions">
       <button class="secondary-button" id="editDuty" type="button">Dienst bearbeiten</button>
       <button class="secondary-button danger-button" id="deleteDuty" type="button">Dienst löschen</button>
     </div>`;
   document.getElementById('backMonth').onclick = () => { selectedDutyId = null; renderMonth(); };
+  document.getElementById('newHistoricalEntry').onclick = () => openNewEntry(id);
   document.getElementById('editDuty').onclick = () => openEditDuty(id);
   document.getElementById('deleteDuty').onclick = () => deleteDutyById(id);
   bindInteractiveEntries();
