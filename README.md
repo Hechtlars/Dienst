@@ -233,3 +233,24 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Das vollständige Foto wird danach verworfen.
 - Der gespeicherte Ausschnitt wird auf maximal 700 px Breite verkleinert und als JPEG mit reduzierter Qualität gespeichert, um localStorage möglichst wenig zu belasten.
 - Gespeicherte ID-Fotos können angetippt und groß angezeigt werden.
+
+## Version 7.26
+- Repariert den Foto-Workflow auf iPhone/Safari.
+- Foto wird direkt aus dem laufenden Kamerabild aufgenommen.
+- Danach öffnet sich die manuelle Zuschneideansicht.
+- Der Nutzer bestimmt den Ausschnitt selbst.
+- Nur der gewählte Ausschnitt wird mit max. 700 px Breite und JPEG 0,65 lokal gespeichert.
+- Vollbildaufnahme wird nach dem Zuschneiden verworfen.
+- Veraltete OCR-Hinweise entfernt.
+
+## Version 7.27
+Die frühere Scan-/OCR-Funktion wurde vollständig verworfen und neu aufgebaut.
+
+Neue Patienten-ID-Funktion:
+1. Kamera öffnen.
+2. Foto aufnehmen.
+3. Ausschnitt manuell mit verschiebbarem/veränderbarem Rahmen festlegen.
+4. Nur diesen Ausschnitt lokal dem jeweiligen Einsatz zuordnen.
+5. Ausschnitt später beim Einsatz anzeigen.
+
+Es gibt keine OCR, keine Ziffernerkennung, kein Tesseract, kein PaddleOCR und keinen externen Erkennungsdienst. Das vollständige Foto wird nicht dauerhaft gespeichert. Der gewählte Ausschnitt wird auf maximal 700 Pixel Breite reduziert und als komprimiertes JPEG gespeichert.
