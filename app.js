@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.18';
+const APP_VERSION = '7.19';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -860,70 +860,17 @@ function openEditEntry(dutyId, entryId) {
 
 
 let patientScannerStream = null;
-let patientOcrWorker = null; // PaddleOCR engine
-let patientOcrLoadPromise = null;
-let patientOcrLoadState = 'idle';
-
-function patientOcrTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(
-      () => reject(new Error(`${label}: Zeitüberschreitung`)), ms
-    ))
-  ]);
-}
-
-async function ensurePatientOcr(status) {
-  if (patientOcrWorker) {
-    if (status) status.textContent = 'Ziffernerkennung bereit.';
-    return patientOcrWorker;
-  }
-  if (patientOcrLoadPromise) {
-    if (status) status.textContent = 'Ziffernerkennung wird bereits vorbereitet …';
-    return patientOcrLoadPromise;
-  }
-
-  patientOcrLoadState = 'loading';
-  patientOcrLoadPromise = (async () => {
-    try {
-      if (status) status.textContent = '1/3 · OCR-Bibliothek wird geladen …';
-      const mod = await patientOcrTimeout(
-        import('https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm'),
-        30000, 'OCR-Bibliothek'
-      );
-      if (!mod.PaddleOCR) throw new Error('PaddleOCR-Bibliothek unvollständig');
-
-      if (status) status.textContent = '2/3 · OCR-Modell wird geladen …';
-      const engine = await patientOcrTimeout(mod.PaddleOCR.create({
-        lang:'en', ocrVersion:'PP-OCRv5',
-        textDetectionBatchSize:1, textRecognitionBatchSize:4, worker:false,
-        ortOptions:{
-          backend:'wasm',
-          wasmPaths:'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
-          numThreads:1, simd:true
-        }
-      }), 90000, 'OCR-Modell');
-
-      patientOcrWorker = engine;
-      patientOcrLoadState = 'ready';
-      if (status) status.textContent = '3/3 · Ziffernerkennung bereit.';
-      return engine;
-    } catch (e) {
-      patientOcrLoadState = 'error';
-      patientOcrWorker = null;
-      throw e;
-    } finally {
-      patientOcrLoadPromise = null;
-    }
-  })();
-  return patientOcrLoadPromise;
-}
+let patientOcrWorker = null;
 let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
 let recognizedPatientIdPending = '';
 let patientScanCandidate = '';
 let patientScanCandidateHits = 0;
+  const previewWrap = document.getElementById('patientOcrPreviewWrap');
+  const preview = document.getElementById('patientOcrPreview');
+  if (previewWrap) previewWrap.hidden = true;
+  if (preview) preview.removeAttribute('src');
 
 function bindPatientIdTools() {
   const input = document.getElementById('entryPatientId');
@@ -939,7 +886,7 @@ function bindPatientIdTools() {
 }
 
 function showPatientScanInfo() {
-  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nDie Texterkennung läuft lokal im Browser. Es wird kein Foto gespeichert oder an einen OCR-Dienst hochgeladen. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
+  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs wird kein Foto gespeichert. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
 }
 
 async function openPatientIdScanner() {
@@ -978,6 +925,11 @@ async function openPatientIdScanner() {
       </div>
     </div>
     <canvas id="patientScannerCanvas" hidden></canvas>
+          <div id="patientOcrPreviewWrap" class="patient-ocr-preview-wrap" hidden>
+            <div class="patient-ocr-preview-title">Dieser Ausschnitt wird tatsächlich ausgewertet</div>
+            <img id="patientOcrPreview" class="patient-ocr-preview" alt="OCR-Ausschnitt">
+            <div class="patient-ocr-preview-hint">Wenn hier nicht exakt die Patienten-ID zu sehen ist, liegt das Problem vor der Texterkennung.</div>
+          </div>
     <div id="scannerStatus" class="scanner-status">Kamera wird gestartet …</div>
     <div class="scanner-actions">
       <button type="button" class="primary" id="capturePatientId">Foto erfassen</button>
@@ -1032,35 +984,52 @@ async function openPatientIdScanner() {
     const status = document.getElementById('scannerStatus');
     if (status) status.textContent = 'OCR wird vorbereitet …';
 
-    // OCR nur einmal pro App-Sitzung laden und anschließend wiederverwenden.
-    await ensurePatientOcr(status);
+    if (!window.Tesseract) {
+      throw new Error('OCR-Bibliothek konnte nicht geladen werden');
+    }
 
-    if (status) status.textContent = 'Bereit – ID vollständig in den Rahmen und dann „Foto erfassen“ tippen.';
+    patientOcrWorker = await Tesseract.createWorker('eng', 1, {
+      logger: message => {
+        const currentStatus = document.getElementById('scannerStatus');
+        if (currentStatus && message.status === 'loading tesseract core') {
+          currentStatus.textContent = 'Ziffernerkennung wird geladen …';
+        }
+      }
+    });
+
+    await patientOcrWorker.setParameters({
+      tessedit_char_whitelist: '0123456789',
+      tessedit_pageseg_mode: '13',
+      preserve_interword_spaces: '0'
+    });
+
+    if (status) status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
   } catch (error) {
     console.warn('Patienten-ID Scanner:', error);
     const status = document.getElementById('scannerStatus');
     if (status) {
-      status.textContent = 'Die neue Ziffernerkennung konnte nicht gestartet werden. Beim ersten Start werden OCR-Modelle geladen; bitte Internetverbindung prüfen oder ID manuell eingeben.';
+      status.textContent = 'Die Ziffernerkennung konnte nicht gestartet werden. Internetverbindung prüfen oder ID manuell eingeben.';
       status.classList.add('scanner-error');
     }
   }
 }
 
 
-async function capturePatientIdStill() {
-  if (patientScanBusy) return;
-  if (!patientOcrWorker) {
-    const status = document.getElementById('scannerStatus');
-    try {
-      await ensurePatientOcr(status);
-    } catch (error) {
-      if (status) {
-        status.textContent = `OCR nicht bereit: ${String(error?.message || 'Ladefehler')}. Scanner schließen und erneut versuchen.`;
-        status.classList.add('scanner-error');
-      }
-      return;
-    }
+
+function showPatientOcrPreviewFromCanvas(canvas) {
+  const wrap = document.getElementById('patientOcrPreviewWrap');
+  const img = document.getElementById('patientOcrPreview');
+  if (!wrap || !img || !canvas?.width || !canvas?.height) return;
+  try {
+    img.src = canvas.toDataURL('image/jpeg', 0.92);
+    wrap.hidden = false;
+  } catch (error) {
+    console.debug('OCR-Vorschau konnte nicht erstellt werden:', error);
   }
+}
+
+async function capturePatientIdStill() {
+  if (patientScanBusy || !patientOcrWorker) return;
 
   const video = document.getElementById('patientScannerVideo');
   const canvas = document.getElementById('patientScannerCanvas');
@@ -1147,34 +1116,19 @@ async function capturePatientIdStill() {
       return unique.length === 1 ? unique[0] : '';
     };
 
-    const observations = [];
+    const idsSeen = [];
 
-    const candidateFromItem = (item) => {
-      const raw = String(item?.text || '').trim();
-      if (!raw) return null;
-
-      const normalized = raw.replace(/[\s.\-_/]/g, '');
-      if (!/^\d{9,30}$/.test(normalized)) return null;
-
-      const score = Number(item?.score ?? 0);
-      return { id: normalized, score };
-    };
-
-    const runPaddle = async (sourceCanvas, variant) => {
-      const [result] = await patientOcrWorker.predict(sourceCanvas, {
-        textDetLimitSideLen: 1600,
-        textDetLimitType: 'max',
-        textDetMaxSideLimit: 2400,
-        textDetThresh: 0.20,
-        textDetBoxThresh: 0.30,
-        textDetUnclipRatio: 1.35,
-        textRecScoreThresh: 0.30
+    const runPass = async (imageData, psm) => {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.putImageData(imageData, 0, 0);
+      await patientOcrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: String(psm),
+        preserve_interword_spaces: '0'
       });
-
-      for (const item of (result?.items || [])) {
-        const candidate = candidateFromItem(item);
-        if (candidate) observations.push({ ...candidate, variant });
-      }
+      const result = await patientOcrWorker.recognize(canvas);
+      const id = extractPatientId(result?.data?.text || '');
+      if (id) idsSeen.push(id);
     };
 
     for (const region of regions) {
@@ -1188,19 +1142,24 @@ async function capturePatientIdStill() {
       cropW = Math.max(1, Math.min(sourceWidth - sx, cropW));
       cropH = Math.max(1, Math.min(sourceHeight - sy, cropH));
 
-      const targetWidth = Math.min(2200, Math.max(1400, Math.round(cropW * 2.2)));
+      const targetWidth = Math.min(3200, Math.max(2100, Math.round(cropW * 3.6)));
       const scale = targetWidth / cropW;
       canvas.width = targetWidth;
-      canvas.height = Math.max(260, Math.round(cropH * scale));
+      canvas.height = Math.max(300, Math.round(cropH * scale));
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(drawSource, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-      await runPaddle(canvas, 'original');
+      // Version 7.19: Beim ersten (zentralen) Ausschnitt exakt anzeigen,
+      // welches Bild wirklich an die OCR weitergegeben wird.
+      if (region === regions[0]) {
+        showPatientOcrPreviewFromCanvas(canvas);
+      }
 
       const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
       const gray = new ImageData(
         new Uint8ClampedArray(original.data),
         original.width,
@@ -1208,44 +1167,40 @@ async function capturePatientIdStill() {
       );
       for (let i = 0; i < gray.data.length; i += 4) {
         const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
-        const v = Math.max(0, Math.min(255, (g - 128) * 1.28 + 128));
+        const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
         gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
       }
-      ctx.putImageData(gray, 0, 0);
-      await runPaddle(canvas, 'gray');
+      await runPass(gray, 13);
 
-      const grouped = observations.reduce((map, obs) => {
-        if (!map[obs.id]) map[obs.id] = { id: obs.id, hits: 0, maxScore: 0, sumScore: 0 };
-        map[obs.id].hits += 1;
-        map[obs.id].maxScore = Math.max(map[obs.id].maxScore, obs.score);
-        map[obs.id].sumScore += obs.score;
-        return map;
-      }, {});
-
-      const ranked = Object.values(grouped).sort((x, y) => {
-        const xRank = x.hits * 2 + x.maxScore + x.sumScore * 0.2;
-        const yRank = y.hits * 2 + y.maxScore + y.sumScore * 0.2;
-        return yRank - xRank;
-      });
-
-      const winner = ranked[0];
-      const runnerUp = ranked[1];
-
-      const winnerIsSafe = winner && (
-        (winner.hits >= 2 && winner.maxScore >= 0.45) ||
-        (winner.hits >= 1 && winner.maxScore >= 0.86)
+      const bw = new ImageData(
+        new Uint8ClampedArray(original.data),
+        original.width,
+        original.height
       );
-      const clearlyAhead = !runnerUp || winner.hits > runnerUp.hits || winner.maxScore > runnerUp.maxScore + 0.18;
+      for (let i = 0; i < bw.data.length; i += 4) {
+        const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
+        const v = g > 150 ? 255 : 0;
+        bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
+      }
+      await runPass(bw, 8);
 
-      if (winnerIsSafe && clearlyAhead) {
-        recognizedPatientIdPending = winner.id;
-        showPatientIdConfirmation(winner.id);
+      const countsNow = idsSeen.reduce((m, id) => {
+        m[id] = (m[id] || 0) + 1;
+        return m;
+      }, {});
+      const winner = Object.entries(countsNow)
+        .filter(([, count]) => count >= 2)
+        .sort((x, y) => y[1] - x[1])[0]?.[0];
+
+      if (winner) {
+        recognizedPatientIdPending = winner;
+        showPatientIdConfirmation(winner);
         return;
       }
     }
 
     if (status) {
-      status.textContent = 'Keine eindeutige ID erkannt. Bitte etwas Abstand halten, kurz fokussieren lassen und erneut „Foto erfassen“ tippen.';
+      status.textContent = 'Keine eindeutige ID erkannt. Prüfe bitte den angezeigten OCR-Ausschnitt: Ist dort die ID scharf und vollständig zu sehen?';
     }
   } catch (error) {
     console.warn('Foto-OCR fehlgeschlagen', error);
@@ -1309,7 +1264,7 @@ function showPatientIdConfirmation(id) {
     document.getElementById('capturePatientId').onclick = capturePatientIdStill;
     document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
     if (status) {
-      status.textContent = 'Bereit – ID vollständig in den Rahmen und dann „Foto erfassen“ tippen.';
+      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
       status.classList.remove('scanner-success');
     }
   };
@@ -1324,8 +1279,11 @@ async function closePatientScanner(restoreRecognizedId = false) {
     patientScannerStream.getTracks().forEach(track => track.stop());
     patientScannerStream = null;
   }
-  // OCR-Engine bleibt für weitere Scans dieser App-Sitzung geladen.
-
+  if (patientOcrWorker) {
+    const worker = patientOcrWorker;
+    patientOcrWorker = null;
+    try { await worker.terminate(); } catch (_) {}
+  }
   patientScanBusy = false;
   const overlay = document.getElementById('patientScannerOverlay');
   if (overlay) {
@@ -1633,14 +1591,6 @@ window.addEventListener('focus', () => refreshTimeSensitiveView(true));
 // Ein laufender Prozess muss nicht neu gestartet werden, wenn eine Dienstgrenze
 // (07:15 / 08:30) überschritten wird. Ein kurzer, lokaler Check genügt.
 setInterval(() => refreshTimeSensitiveView(false), 30000);
-
-
-// PaddleOCR nach App-Start im Leerlauf vorladen. Die App selbst wird dadurch nicht blockiert.
-window.addEventListener('load', () => {
-  const start = () => ensurePatientOcr(null).catch(e => console.debug('OCR-Vorladen:', e));
-  if ('requestIdleCallback' in window) requestIdleCallback(start, {timeout:5000});
-  else setTimeout(start, 2500);
-}, {once:true});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {

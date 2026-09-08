@@ -168,23 +168,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Das Einzelbild wird nicht gespeichert, sondern nur kurzfristig im Arbeitsspeicher verarbeitet und anschließend verworfen.
 
 
-## Version 7.17
-- Tesseract wurde aus dem Patienten-ID-Scanner entfernt.
-- Neue OCR-Engine: offizielles PaddleOCR.js mit PP-OCRv5.
-- Inferenz läuft im Browser über ONNX Runtime Web / WebAssembly.
-- Kamerabilder werden nicht an einen OCR-Dienst gesendet.
-- PaddleOCR analysiert den gezielten Einzelbild-Ausschnitt in Original- und Graustufenvariante.
-- Nur Zahlenfolgen mit mindestens 9 Ziffern werden als Patienten-ID berücksichtigt.
-- Leerzeichen/Punkte/Bindestriche dürfen nur innerhalb derselben von PaddleOCR erkannten Textzeile normalisiert werden; getrennte Textzeilen werden niemals zusammengefügt.
-- Mehrere Kandidaten werden nach Trefferzahl und Paddle-Konfidenz bewertet; unsichere Ergebnisse werden nicht automatisch übernommen.
-- Vor der Übernahme bleibt die sichtbare Bestätigung der erkannten Patienten-ID erhalten.
-- Beim ersten Scan müssen OCR-Bibliothek und Modelle aus dem Internet geladen werden; die eigentliche Bildauswertung erfolgt danach lokal im Browser.
-
-## Version 7.18
-- PaddleOCR wird nur einmal pro App-Sitzung geladen und danach wiederverwendet.
-- Scanner-Schließen beendet die OCR-Engine nicht mehr.
-- OCR wird nach App-Start im Leerlauf vorgeladen.
-- Gleichzeitige Initialisierungen werden verhindert.
-- Ladeanzeige zeigt Bibliothek, Modell und Bereitschaft getrennt.
-- 30-Sekunden-Timeout für die Bibliothek und 90-Sekunden-Timeout für das Modell.
-- Bei einem Fehler wird die konkrete Ursache angezeigt statt dauerhaft „wird geladen“.
+## Version 7.19
+- Rückkehr zur funktionierenden Tesseract-Basis aus Version 7.16.
+- PaddleOCR wurde nicht übernommen.
+- Neu: Nach „Foto erfassen“ zeigt der Scanner direkt den exakten Bildausschnitt an, der tatsächlich an die OCR weitergegeben wird.
+- Dadurch lässt sich erstmals eindeutig unterscheiden, ob der Fehler beim Kamera-/Rahmen-Zuschnitt oder bei der eigentlichen Ziffernerkennung entsteht.
+- Die Vorschau wird nur temporär im Browser angezeigt und nicht gespeichert.
+- Sicherheitsbestätigung vor Übernahme der Patienten-ID bleibt bestehen.

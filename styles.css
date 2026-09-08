@@ -524,5 +524,33 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
 .scanner-actions .primary{font-weight:800}
 .scanner-status{min-height:48px}
 
-/* Version 7.17: PaddleOCR */
-.scanner-status.scanner-error { line-height: 1.35; }
+/* Version 7.19: sichtbare Diagnose des tatsächlich ausgewerteten OCR-Ausschnitts */
+.patient-ocr-preview-wrap{
+  margin:12px 14px 4px;
+  padding:10px;
+  border-radius:14px;
+  background:rgba(255,255,255,.10);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.patient-ocr-preview-title{
+  font-size:12px;
+  font-weight:800;
+  margin-bottom:8px;
+  text-align:center;
+}
+.patient-ocr-preview{
+  display:block;
+  width:100%;
+  max-height:150px;
+  object-fit:contain;
+  border-radius:10px;
+  background:#fff;
+}
+.patient-ocr-preview-hint{
+  margin-top:7px;
+  font-size:11px;
+  line-height:1.35;
+  opacity:.82;
+  text-align:center;
+}
