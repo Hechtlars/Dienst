@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.12';
+const APP_VERSION = '7.13';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -865,6 +865,8 @@ let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
 let recognizedPatientIdPending = '';
+let patientScanCandidate = '';
+let patientScanCandidateHits = 0;
 
 function bindPatientIdTools() {
   const input = document.getElementById('entryPatientId');
@@ -885,6 +887,9 @@ function showPatientScanInfo() {
 
 async function openPatientIdScanner() {
   patientScanTarget = document.getElementById('entryPatientId');
+  patientScanCandidate = '';
+  patientScanCandidateHits = 0;
+  recognizedPatientIdPending = '';
   if (!patientScanTarget) return;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1007,7 +1012,7 @@ async function scanPatientFrame(manual) {
     // Der ausgewertete Bereich entspricht dem sichtbaren horizontalen Scanrahmen.
     // Breit, aber bewusst niedrig, damit umliegende Namen/Geburtsdaten nicht Teil der OCR sind.
     const cropW = Math.round(vw * 0.94);
-    const cropH = Math.round(vh * 0.22);
+    const cropH = Math.round(vh * 0.16);
     const sx = Math.round((vw - cropW) / 2);
     const sy = Math.round((vh - cropH) / 2);
 
@@ -1034,15 +1039,14 @@ async function scanPatientFrame(manual) {
     let raw = String(result?.data?.text || '');
 
     const extractPatientId = (text) => {
-      const digitsOnly = String(text || '').replace(/\D/g, '');
-      const candidates = String(text || '').match(/\d[\d\s.-]{7,}\d/g) || [];
-      const normalized = candidates
-        .map(value => value.replace(/\D/g, ''))
-        .filter(value => value.length >= 9 && value.length <= 30)
-        .sort((x, y) => y.length - x.length);
-      if (normalized[0]) return normalized[0];
-      if (digitsOnly.length >= 9 && digitsOnly.length <= 30) return digitsOnly;
-      return '';
+      // Sicherheitsregel: Nur eine von OCR als zusammenhängende Ziffernfolge
+      // gelieferte ID akzeptieren. Keine getrennten Fragmente zusammenkleben.
+      const matches = String(text || '').match(/(?:^|[^\d])(\d{9,30})(?=$|[^\d])/g) || [];
+      const ids = matches
+        .map(value => (value.match(/\d{9,30}/) || [''])[0])
+        .filter(Boolean);
+      const unique = [...new Set(ids)];
+      return unique.length === 1 ? unique[0] : '';
     };
 
     let id = extractPatientId(raw);
@@ -1076,21 +1080,30 @@ async function scanPatientFrame(manual) {
     }
 
     if (id) {
+      if (patientScanCandidate === id) patientScanCandidateHits += 1;
+      else {
+        patientScanCandidate = id;
+        patientScanCandidateHits = 1;
+      }
+
+      if (patientScanCandidateHits < 2) {
+        if (status) {
+          status.textContent = `Mögliche ID: ${id} – wird zur Sicherheit erneut geprüft …`;
+          status.classList.remove('scanner-success');
+        }
+        // Bei manueller Erfassung direkt einen zweiten Kontrolllauf anstoßen.
+        if (manual) window.setTimeout(() => scanPatientFrame(false), 220);
+        return;
+      }
+
       recognizedPatientIdPending = id;
-      const target = patientScanTarget || document.getElementById('entryPatientId');
-      if (target && document.body.contains(target)) {
-        target.value = id;
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      if (status) {
-        status.textContent = `Erkannt: ${id}`;
-        status.classList.add('scanner-success');
-      }
-      haptic();
-      window.setTimeout(() => closePatientScanner(true), 450);
+      showPatientIdConfirmation(id);
       return;
     }
+
+    // Ein fehlgeschlagener Durchlauf verwirft einen unsicheren Einzel-Treffer.
+    patientScanCandidate = '';
+    patientScanCandidateHits = 0;
 
     if (status) {
       status.textContent = manual
@@ -1109,6 +1122,60 @@ async function scanPatientFrame(manual) {
     patientScanBusy = false;
     if (button) button.disabled = false;
   }
+}
+
+function showPatientIdConfirmation(id) {
+  if (patientScanTimer) {
+    window.clearInterval(patientScanTimer);
+    patientScanTimer = null;
+  }
+  const panel = document.querySelector('#patientScannerOverlay .patient-scanner-panel');
+  if (!panel) return;
+
+  const status = document.getElementById('scannerStatus');
+  if (status) {
+    status.textContent = `Erkannt: ${id}`;
+    status.classList.add('scanner-success');
+  }
+
+  let confirmation = document.getElementById('patientIdConfirmation');
+  if (!confirmation) {
+    confirmation = document.createElement('div');
+    confirmation.id = 'patientIdConfirmation';
+    confirmation.className = 'patient-id-confirmation';
+    const actions = panel.querySelector('.scanner-actions');
+    if (actions) actions.replaceWith(confirmation);
+    else panel.appendChild(confirmation);
+  }
+
+  confirmation.innerHTML = `
+    <div class="patient-id-confirmation-label">Erkannte Patienten-ID</div>
+    <div class="patient-id-confirmation-number">${escapeHtml(id)}</div>
+    <div class="patient-id-confirmation-hint">Bitte Nummer kurz mit der Anzeige abgleichen.</div>
+    <button type="button" class="primary" id="confirmPatientId">Übernehmen</button>
+    <button type="button" class="secondary-button" id="retryPatientId">Erneut scannen</button>`;
+
+  document.getElementById('confirmPatientId').onclick = () => {
+    recognizedPatientIdPending = id;
+    haptic();
+    closePatientScanner(true);
+  };
+  document.getElementById('retryPatientId').onclick = () => {
+    patientScanCandidate = '';
+    patientScanCandidateHits = 0;
+    recognizedPatientIdPending = '';
+    confirmation.innerHTML = `
+      <button type="button" class="primary" id="capturePatientId">Jetzt erfassen</button>
+      <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>`;
+    document.getElementById('capturePatientId').onclick = () => scanPatientFrame(true);
+    document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
+    if (status) {
+      status.textContent = 'Bereit – ID ruhig in den Rahmen halten.';
+      status.classList.remove('scanner-success');
+    }
+    patientScanTimer = window.setInterval(() => scanPatientFrame(false), 1800);
+    window.setTimeout(() => scanPatientFrame(false), 300);
+  };
 }
 
 async function closePatientScanner(restoreRecognizedId = false) {
@@ -1147,6 +1214,8 @@ async function closePatientScanner(restoreRecognizedId = false) {
   }
 
   patientScanTarget = null;
+  patientScanCandidate = '';
+  patientScanCandidateHits = 0;
   if (!restoreRecognizedId) recognizedPatientIdPending = '';
   else window.setTimeout(() => { recognizedPatientIdPending = ''; }, 800);
 }

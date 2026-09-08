@@ -452,3 +452,39 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
 }
 .scanner-shade-top{height:39%}
 .scanner-shade-bottom{top:61%}
+
+/* Version 7.13: sichererer, etwas flacherer Scanbereich */
+.patient-scanner-overlay .scanner-guide{
+  left:3%;
+  right:3%;
+  top:42%;
+  height:16%;
+}
+.scanner-shade-top{height:42%}
+.scanner-shade-bottom{top:58%}
+.patient-id-confirmation{
+  padding:8px 16px;
+  display:grid;
+  gap:9px;
+}
+.patient-id-confirmation-label{
+  text-align:center;
+  font-size:13px;
+  color:rgba(255,255,255,.68);
+}
+.patient-id-confirmation-number{
+  text-align:center;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:800;
+  letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;
+}
+.patient-id-confirmation-hint{
+  text-align:center;
+  font-size:12px;
+  color:rgba(255,255,255,.6);
+  margin-bottom:3px;
+}
+.patient-id-confirmation .primary,
+.patient-id-confirmation .secondary-button{width:100%}

@@ -125,3 +125,13 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Scanner schließt sich anschließend automatisch und kehrt zur Einsatzmaske zurück.
 - Zusätzliche input/change-Events sorgen insbesondere unter iOS/Safari dafür, dass die übernommene ID im Formular erhalten bleibt.
 - Scanrahmen und tatsächlich ausgewerteter Bildbereich wurden etwas vergrößert, damit die Ziffern nicht mehr ganz so exakt positioniert werden müssen.
+
+
+## Version 7.13
+- Sicherheitslogik des Patienten-ID-Scanners verschärft.
+- Getrennt erkannte Ziffernfragmente werden nicht mehr zu einer vermeintlichen ID zusammengesetzt.
+- Eine ID muss als zusammenhängende Zahlenfolge mit mindestens 9 Ziffern erkannt werden.
+- Dieselbe ID muss in zwei Erkennungsdurchläufen übereinstimmen.
+- Danach wird die erkannte Nummer groß angezeigt und muss mit „Übernehmen“ bestätigt werden.
+- „Erneut scannen“ verwirft den Treffer.
+- Der Scanbereich bleibt breit, wurde vertikal aber wieder enger auf die eigentliche ID-Zeile begrenzt.
