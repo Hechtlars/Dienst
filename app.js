@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.19';
+const APP_VERSION = '7.20';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -926,9 +926,9 @@ async function openPatientIdScanner() {
     </div>
     <canvas id="patientScannerCanvas" hidden></canvas>
           <div id="patientOcrPreviewWrap" class="patient-ocr-preview-wrap" hidden>
-            <div class="patient-ocr-preview-title">Dieser Ausschnitt wird tatsächlich ausgewertet</div>
+            <div class="patient-ocr-preview-title">Dieser Zahlenbereich wird zuerst ausgewertet</div>
             <img id="patientOcrPreview" class="patient-ocr-preview" alt="OCR-Ausschnitt">
-            <div class="patient-ocr-preview-hint">Wenn hier nicht exakt die Patienten-ID zu sehen ist, liegt das Problem vor der Texterkennung.</div>
+            <div class="patient-ocr-preview-hint">Die App schneidet störende Symbole links und rechts bewusst ab und untersucht zuerst nur diesen Bereich.</div>
           </div>
     <div id="scannerStatus" class="scanner-status">Kamera wird gestartet …</div>
     <div class="scanner-actions">
@@ -1100,15 +1100,22 @@ async function capturePatientIdStill() {
     baseW = Math.min(sourceWidth - baseSx, baseW);
     baseH = Math.min(sourceHeight - baseSy, baseH);
 
+    // Version 7.20:
+    // Die sichtbare ID steht in der Mitte der Bildschirmzeile. Symbole links/rechts
+    // haben Tesseract bisher irritiert. Deshalb werden zuerst mehrere ENGE,
+    // mittig liegende Zahlenfenster untersucht. Erst danach folgt ein breiter Fallback.
     const regions = [
-      { dx: 0.00, dy: 0.00, scaleX: 1.00, scaleY: 1.00 },
-      { dx: 0.00, dy: -0.08, scaleX: 0.96, scaleY: 0.78 },
-      { dx: 0.00, dy:  0.08, scaleX: 0.96, scaleY: 0.78 },
-      { dx: -0.05, dy: 0.00, scaleX: 0.90, scaleY: 0.82 },
-      { dx:  0.05, dy: 0.00, scaleX: 0.90, scaleY: 0.82 }
+      { name: 'digits-tight',  dx: 0.00, dy: 0.00, scaleX: 0.46, scaleY: 0.58 },
+      { name: 'digits-medium', dx: 0.00, dy: 0.00, scaleX: 0.56, scaleY: 0.64 },
+      { name: 'digits-wide',   dx: 0.00, dy: 0.00, scaleX: 0.66, scaleY: 0.70 },
+      { name: 'digits-left',   dx:-0.035, dy:0.00, scaleX:0.58, scaleY:0.66 },
+      { name: 'digits-right',  dx: 0.035, dy:0.00, scaleX:0.58, scaleY:0.66 },
+      { name: 'fallback',      dx: 0.00, dy: 0.00, scaleX: 0.86, scaleY: 0.78 }
     ];
 
     const extractPatientId = (text) => {
+      // Nicht verschiedene OCR-Fragmente zusammenkleben.
+      // Erlaubt sind nur zusammenhängende Zahlenfolgen von 9–30 Stellen.
       const matches = [...String(text || '').matchAll(/(^|[^\d])(\d{9,30})(?=$|[^\d])/g)]
         .map(m => m[2])
         .filter(Boolean);
@@ -1116,19 +1123,28 @@ async function capturePatientIdStill() {
       return unique.length === 1 ? unique[0] : '';
     };
 
-    const idsSeen = [];
+    const observations = [];
 
-    const runPass = async (imageData, psm) => {
+    const runPass = async (imageData, psm, regionName, variant) => {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.putImageData(imageData, 0, 0);
+
       await patientOcrWorker.setParameters({
         tessedit_char_whitelist: '0123456789',
         tessedit_pageseg_mode: String(psm),
-        preserve_interword_spaces: '0'
+        preserve_interword_spaces: '0',
+        classify_bln_numeric_mode: '1',
+        user_defined_dpi: '300'
       });
+
       const result = await patientOcrWorker.recognize(canvas);
-      const id = extractPatientId(result?.data?.text || '');
-      if (id) idsSeen.push(id);
+      const raw = String(result?.data?.text || '').trim();
+      const id = extractPatientId(raw);
+      const confidence = Number(result?.data?.confidence || 0);
+
+      if (id) {
+        observations.push({ id, confidence, regionName, variant, psm });
+      }
     };
 
     for (const region of regions) {
@@ -1142,24 +1158,27 @@ async function capturePatientIdStill() {
       cropW = Math.max(1, Math.min(sourceWidth - sx, cropW));
       cropH = Math.max(1, Math.min(sourceHeight - sy, cropH));
 
-      const targetWidth = Math.min(3200, Math.max(2100, Math.round(cropW * 3.6)));
+      // Weniger extremes Hochskalieren als zuvor, damit Monitor-Pixel/Moiré
+      // nicht zusätzlich vergrößert werden.
+      const targetWidth = Math.min(2600, Math.max(1600, Math.round(cropW * 2.6)));
       const scale = targetWidth / cropW;
       canvas.width = targetWidth;
-      canvas.height = Math.max(300, Math.round(cropH * scale));
+      canvas.height = Math.max(260, Math.round(cropH * scale));
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(drawSource, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-      // Version 7.19: Beim ersten (zentralen) Ausschnitt exakt anzeigen,
-      // welches Bild wirklich an die OCR weitergegeben wird.
+      // Die Vorschau zeigt das erste, engste Zahlenfenster – also genau den Bereich,
+      // der zuerst an Tesseract geht.
       if (region === regions[0]) {
         showPatientOcrPreviewFromCanvas(canvas);
       }
 
       const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+      // Variante 1: Graustufen mit moderatem Kontrast
       const gray = new ImageData(
         new Uint8ClampedArray(original.data),
         original.width,
@@ -1167,40 +1186,68 @@ async function capturePatientIdStill() {
       );
       for (let i = 0; i < gray.data.length; i += 4) {
         const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
-        const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
+        const v = Math.max(0, Math.min(255, (g - 128) * 1.25 + 128));
         gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
       }
-      await runPass(gray, 13);
+      await runPass(gray, 13, region.name, 'gray');
+      await runPass(gray, 8, region.name, 'gray');
 
+      // Variante 2: adaptiv etwas hellere Schwelle
       const bw = new ImageData(
         new Uint8ClampedArray(original.data),
         original.width,
         original.height
       );
+      let sum = 0;
+      const pixelCount = bw.data.length / 4;
+      for (let i = 0; i < bw.data.length; i += 4) {
+        sum += 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
+      }
+      const mean = sum / Math.max(1, pixelCount);
+      const threshold = Math.max(125, Math.min(190, mean - 12));
+
       for (let i = 0; i < bw.data.length; i += 4) {
         const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
-        const v = g > 150 ? 255 : 0;
+        const v = g > threshold ? 255 : 0;
         bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
       }
-      await runPass(bw, 8);
+      await runPass(bw, 8, region.name, 'bw');
 
-      const countsNow = idsSeen.reduce((m, id) => {
-        m[id] = (m[id] || 0) + 1;
+      // Kandidaten nur übernehmen, wenn mehrere unabhängige Durchläufe dieselbe
+      // komplette ID liefern. Ein einzelner Treffer reicht bei Patienten-IDs nicht.
+      const grouped = observations.reduce((m, obs) => {
+        if (!m[obs.id]) m[obs.id] = { id: obs.id, hits: 0, bestConfidence: 0, regions: new Set() };
+        m[obs.id].hits += 1;
+        m[obs.id].bestConfidence = Math.max(m[obs.id].bestConfidence, obs.confidence);
+        m[obs.id].regions.add(obs.regionName);
         return m;
       }, {});
-      const winner = Object.entries(countsNow)
-        .filter(([, count]) => count >= 2)
-        .sort((x, y) => y[1] - x[1])[0]?.[0];
 
-      if (winner) {
-        recognizedPatientIdPending = winner;
-        showPatientIdConfirmation(winner);
+      const ranked = Object.values(grouped)
+        .map(x => ({ ...x, regionCount: x.regions.size }))
+        .sort((x, y) =>
+          (y.hits * 3 + y.regionCount * 2 + y.bestConfidence / 100) -
+          (x.hits * 3 + x.regionCount * 2 + x.bestConfidence / 100)
+        );
+
+      const winner = ranked[0];
+      const runnerUp = ranked[1];
+
+      const safe =
+        winner &&
+        winner.hits >= 2 &&
+        (winner.regionCount >= 2 || winner.bestConfidence >= 75) &&
+        (!runnerUp || winner.hits > runnerUp.hits || winner.regionCount > runnerUp.regionCount);
+
+      if (safe) {
+        recognizedPatientIdPending = winner.id;
+        showPatientIdConfirmation(winner.id);
         return;
       }
     }
 
     if (status) {
-      status.textContent = 'Keine eindeutige ID erkannt. Prüfe bitte den angezeigten OCR-Ausschnitt: Ist dort die ID scharf und vollständig zu sehen?';
+      status.textContent = 'Keine eindeutige ID erkannt. Prüfe den angezeigten Zahlenbereich: Ist dort nur die vollständige ID scharf zu sehen?';
     }
   } catch (error) {
     console.warn('Foto-OCR fehlgeschlagen', error);

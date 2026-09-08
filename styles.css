@@ -554,3 +554,6 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
   opacity:.82;
   text-align:center;
 }
+
+/* Version 7.20 */
+.patient-ocr-preview-title { letter-spacing: .1px; }

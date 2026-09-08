@@ -175,3 +175,15 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Dadurch lässt sich erstmals eindeutig unterscheiden, ob der Fehler beim Kamera-/Rahmen-Zuschnitt oder bei der eigentlichen Ziffernerkennung entsteht.
 - Die Vorschau wird nur temporär im Browser angezeigt und nicht gespeichert.
 - Sicherheitsbestätigung vor Übernahme der Patienten-ID bleibt bestehen.
+
+
+## Version 7.20
+- Aufbauend auf dem erfolgreichen Diagnosebild aus 7.19.
+- Kamera-Mapping bleibt unverändert, da der tatsächlich ausgewertete Ausschnitt korrekt war.
+- Tesseract untersucht jetzt zuerst mehrere enge, mittig liegende Zahlenbereiche statt die komplette Bildschirmzeile.
+- Symbole links/rechts werden dadurch bewusst abgeschnitten.
+- Tesseract bleibt auf Ziffern 0–9 beschränkt und erhält zusätzlich Numeric-Mode.
+- Weniger aggressives Upscaling, um Monitor-Moiré/Pixelfehler nicht unnötig zu verstärken.
+- Mehrere OCR-Modi und Bildvarianten werden verglichen.
+- Eine Patienten-ID wird nur angeboten, wenn mehrere unabhängige OCR-Durchläufe dieselbe vollständige Zahlenfolge liefern.
+- Die Vorschau zeigt nun den engsten Zahlenbereich, der tatsächlich zuerst ausgewertet wird.
