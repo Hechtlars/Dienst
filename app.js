@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.7';
+const APP_VERSION = '7.8';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -854,6 +854,10 @@ function openEditEntry(dutyId, entryId) {
 
 
 let patientScannerStream = null;
+let patientOcrWorker = null;
+let patientScanTimer = null;
+let patientScanBusy = false;
+let patientScanTarget = null;
 
 function bindPatientIdTools() {
   const input = document.getElementById('entryPatientId');
@@ -873,140 +877,216 @@ function showPatientScanInfo() {
 }
 
 async function openPatientIdScanner() {
-  const targetInput = document.getElementById('entryPatientId');
-  if (!targetInput) return;
+  patientScanTarget = document.getElementById('entryPatientId');
+  if (!patientScanTarget) return;
+
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     alert('Die Kamera kann in diesem Browser nicht direkt geöffnet werden. Bitte die Patienten-ID manuell eingeben.');
     return;
   }
-  const previousContent = modalContent.innerHTML;
+
+  closePatientScanner();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'patientScannerOverlay';
+  overlay.className = 'patient-scanner-overlay';
+  overlay.innerHTML = `<div class="patient-scanner-panel">
+    <div class="scanner-topbar">
+      <button type="button" class="scanner-close" id="cancelPatientScan" aria-label="Scanner schließen">×</button>
+      <div>
+        <div class="scanner-title">Patienten-ID scannen</div>
+        <div class="scanner-subtitle">Mindestens 9 Ziffern in den Rahmen halten</div>
+      </div>
+      <span class="scanner-spacer" aria-hidden="true"></span>
+    </div>
+    <div class="scanner-video-wrap">
+      <video id="patientScannerVideo" playsinline autoplay muted></video>
+      <div class="scanner-shade scanner-shade-top"></div>
+      <div class="scanner-shade scanner-shade-bottom"></div>
+      <div class="scanner-guide" aria-hidden="true">
+        <span>123456789</span>
+      </div>
+    </div>
+    <canvas id="patientScannerCanvas" hidden></canvas>
+    <div id="scannerStatus" class="scanner-status">Kamera wird gestartet …</div>
+    <div class="scanner-actions">
+      <button type="button" class="primary" id="capturePatientId">Jetzt erfassen</button>
+      <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>
+    </div>
+    <div class="scanner-privacy">Kein Foto wird gespeichert. Übernommen wird ausschließlich die erkannte Patienten-ID.</div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById('cancelPatientScan').onclick = closePatientScanner;
+  document.getElementById('enterPatientIdManually').onclick = closePatientScanner;
+  document.getElementById('capturePatientId').onclick = () => scanPatientFrame(true);
+
   try {
     patientScannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
       audio: false
     });
-    modalContent.innerHTML = `<div class="modal-body scanner-body">
-      <div class="modal-title">Patienten-ID scannen</div>
-      <div class="scanner-note">Nur die Zahlenfolge der Patienten-ID in den Rahmen halten.</div>
-      <div class="scanner-video-wrap">
-        <video id="patientScannerVideo" playsinline autoplay muted></video>
-        <div class="scanner-guide" aria-hidden="true"></div>
-      </div>
-      <div id="scannerStatus" class="small-note">Kamera bereit. Das Bild wird nicht gespeichert.</div>
-      <canvas id="patientScannerCanvas" hidden></canvas>
-      <button type="button" class="primary" id="capturePatientId">ID erfassen</button>
-      <button type="button" class="secondary-button" id="cancelPatientScan">Abbrechen</button>
-    </div>`;
+
     const video = document.getElementById('patientScannerVideo');
+    if (!video) return;
     video.srcObject = patientScannerStream;
-    document.getElementById('cancelPatientScan').onclick = () => {
-      stopPatientScanner();
-      modalContent.innerHTML = previousContent;
-      bindPatientIdTools();
-      bindRestoredEntryFormHandlers();
-    };
-    document.getElementById('capturePatientId').onclick = async () => {
-      const captureButton = document.getElementById('capturePatientId');
-      const status = document.getElementById('scannerStatus');
-      captureButton.disabled = true;
-      status.textContent = 'Patienten-ID wird lokal erkannt …';
-      try {
-        const id = await recognizePatientId(video);
-        if (!id) {
-          status.textContent = 'Keine eindeutige ID mit mindestens 9 Ziffern erkannt. Bitte erneut versuchen.';
-          captureButton.disabled = false;
-          return;
+    await video.play();
+
+    const status = document.getElementById('scannerStatus');
+    if (status) status.textContent = 'OCR wird vorbereitet …';
+
+    if (!window.Tesseract) {
+      throw new Error('OCR-Bibliothek konnte nicht geladen werden');
+    }
+
+    patientOcrWorker = await Tesseract.createWorker('eng', 1, {
+      logger: message => {
+        const currentStatus = document.getElementById('scannerStatus');
+        if (currentStatus && message.status === 'loading tesseract core') {
+          currentStatus.textContent = 'Ziffernerkennung wird geladen …';
         }
-        stopPatientScanner();
-        modalContent.innerHTML = previousContent;
-        bindPatientIdTools();
-        bindRestoredEntryFormHandlers();
-        const restoredInput = document.getElementById('entryPatientId');
-        if (restoredInput) restoredInput.value = id;
-        const error = document.getElementById('modalError');
-        if (error) error.textContent = '';
-      } catch (error) {
-        console.warn('Patienten-ID Scan fehlgeschlagen', error);
-        status.textContent = 'Die ID konnte nicht sicher erkannt werden. Bitte erneut versuchen oder manuell eingeben.';
-        captureButton.disabled = false;
       }
-    };
+    });
+
+    await patientOcrWorker.setParameters({
+      tessedit_char_whitelist: '0123456789',
+      tessedit_pageseg_mode: '7',
+      preserve_interword_spaces: '0'
+    });
+
+    if (status) status.textContent = 'Bereit – ID ruhig in den Rahmen halten.';
+    // Automatische Erkennung. Nicht permanent filmen/archivieren:
+    // Es wird jeweils nur ein temporärer Canvas-Ausschnitt ausgewertet.
+    patientScanTimer = window.setInterval(() => scanPatientFrame(false), 1800);
+    window.setTimeout(() => scanPatientFrame(false), 500);
   } catch (error) {
-    stopPatientScanner();
-    alert('Die Kamera konnte nicht geöffnet werden. Bitte Kamerazugriff erlauben oder die Patienten-ID manuell eingeben.');
+    console.warn('Patienten-ID Scanner:', error);
+    const status = document.getElementById('scannerStatus');
+    if (status) {
+      status.textContent = 'Die Ziffernerkennung konnte nicht gestartet werden. Internetverbindung prüfen oder ID manuell eingeben.';
+      status.classList.add('scanner-error');
+    }
   }
 }
 
-function bindRestoredEntryFormHandlers() {
-  // Nach Rückkehr aus dem Scanner bleiben die bereits im Formular gesetzten onclick-Handler
-  // im gespeicherten DOM-Text nicht erhalten. Daher wird nur ein Hinweis gegeben, falls
-  // der Nutzer abbricht; ein erneutes Öffnen des Formulars ist der sichere Fallback.
-  const saveButton = document.getElementById('saveEntry');
-  if (saveButton && !saveButton.onclick) {
-    saveButton.onclick = () => {
-      alert('Bitte das Einsatzfenster einmal schließen und erneut öffnen. Deine Patienten-ID wurde nicht gespeichert.');
-    };
+async function scanPatientFrame(manual) {
+  if (patientScanBusy || !patientOcrWorker) return;
+
+  const video = document.getElementById('patientScannerVideo');
+  const canvas = document.getElementById('patientScannerCanvas');
+  const status = document.getElementById('scannerStatus');
+  const button = document.getElementById('capturePatientId');
+  if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+    if (manual && status) status.textContent = 'Kamerabild noch nicht bereit. Bitte kurz warten.';
+    return;
+  }
+
+  patientScanBusy = true;
+  if (button && manual) button.disabled = true;
+  if (status) status.textContent = manual ? 'ID wird erkannt …' : 'Suche Patienten-ID …';
+
+  try {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    // Der ausgewertete Bereich entspricht dem sichtbaren horizontalen Scanrahmen.
+    // Breit, aber bewusst niedrig, damit umliegende Namen/Geburtsdaten nicht Teil der OCR sind.
+    const cropW = Math.round(vw * 0.90);
+    const cropH = Math.round(vh * 0.18);
+    const sx = Math.round((vw - cropW) / 2);
+    const sy = Math.round((vh - cropH) / 2);
+
+    // Hochskalieren verbessert kleine Monitor-Schriften und reduziert OCR-Aussetzer.
+    const scale = cropW < 1400 ? 2 : 1.35;
+    canvas.width = Math.round(cropW * scale);
+    canvas.height = Math.round(cropH * scale);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+    // Moderate Graustufen-/Kontrastanhebung statt der früheren harten Schwarz-Weiß-Schwelle,
+    // die Monitor-Ziffern teilweise zerstört hat.
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
+      data[i] = data[i + 1] = data[i + 2] = contrasted;
+    }
+    ctx.putImageData(image, 0, 0);
+
+    const result = await patientOcrWorker.recognize(canvas);
+    const raw = String(result?.data?.text || '');
+    const digitsOnly = raw.replace(/\D/g, '');
+    const candidates = raw.match(/\d[\d\s.-]{7,}\d/g) || [];
+    const normalized = candidates
+      .map(value => value.replace(/\D/g, ''))
+      .filter(value => value.length >= 9 && value.length <= 30)
+      .sort((x, y) => y.length - x.length);
+
+    let id = normalized[0] || '';
+    if (!id && digitsOnly.length >= 9 && digitsOnly.length <= 30) id = digitsOnly;
+
+    if (id) {
+      const target = patientScanTarget;
+      if (target && document.body.contains(target)) {
+        target.value = id;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (status) {
+        status.textContent = `Erkannt: ${id}`;
+        status.classList.add('scanner-success');
+      }
+      haptic();
+      window.setTimeout(closePatientScanner, 450);
+      return;
+    }
+
+    if (status) {
+      status.textContent = manual
+        ? 'Noch keine ID erkannt. Näher herangehen und die Ziffern mittig in den Rahmen halten.'
+        : 'Noch keine ID erkannt – bitte ruhig und mittig halten.';
+    }
+  } catch (error) {
+    console.warn('OCR-Erkennung fehlgeschlagen', error);
+    if (status) status.textContent = 'Erkennung fehlgeschlagen. Bitte erneut versuchen oder manuell eingeben.';
+  } finally {
+    // Temporären Bildinhalt sofort verwerfen.
+    if (canvas) {
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+    patientScanBusy = false;
+    if (button) button.disabled = false;
   }
 }
 
-function stopPatientScanner() {
+async function closePatientScanner() {
+  if (patientScanTimer) {
+    window.clearInterval(patientScanTimer);
+    patientScanTimer = null;
+  }
   if (patientScannerStream) {
     patientScannerStream.getTracks().forEach(track => track.stop());
     patientScannerStream = null;
   }
+  if (patientOcrWorker) {
+    const worker = patientOcrWorker;
+    patientOcrWorker = null;
+    try { await worker.terminate(); } catch (_) {}
+  }
+  patientScanBusy = false;
+  const overlay = document.getElementById('patientScannerOverlay');
+  if (overlay) overlay.remove();
+  patientScanTarget = null;
 }
 
-async function recognizePatientId(video) {
-  if (!window.Tesseract) throw new Error('OCR nicht geladen');
-  const canvas = document.getElementById('patientScannerCanvas');
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-  if (!vw || !vh) throw new Error('Kamerabild noch nicht bereit');
-
-  // Nur ein schmaler Bereich in der Bildmitte wird verarbeitet.
-  const cropW = Math.round(vw * 0.88);
-  const cropH = Math.round(vh * 0.24);
-  const sx = Math.round((vw - cropW) / 2);
-  const sy = Math.round((vh - cropH) / 2);
-  canvas.width = cropW;
-  canvas.height = cropH;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-
-  // Kontrast erhöhen, damit Monitor-Pixel/Moiré weniger stören.
-  const image = ctx.getImageData(0, 0, cropW, cropH);
-  const data = image.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-    const value = gray > 150 ? 255 : 0;
-    data[i] = data[i+1] = data[i+2] = value;
-  }
-  ctx.putImageData(image, 0, 0);
-
-  const worker = await Tesseract.createWorker('eng', 1, {
-    logger: m => {
-      const status = document.getElementById('scannerStatus');
-      if (status && m.status === 'recognizing text' && typeof m.progress === 'number') {
-        status.textContent = `Patienten-ID wird lokal erkannt … ${Math.round(m.progress * 100)} %`;
-      }
-    }
-  });
-  try {
-    await worker.setParameters({
-      tessedit_char_whitelist: '0123456789',
-      tessedit_pageseg_mode: '7'
-    });
-    const result = await worker.recognize(canvas);
-    const candidates = String(result.data.text || '').match(/\d{9,}/g) || [];
-    if (!candidates.length) return '';
-    candidates.sort((x, y) => y.length - x.length);
-    return candidates[0].slice(0, 30);
-  } finally {
-    await worker.terminate();
-    // Der Canvas-Inhalt wird unmittelbar verworfen.
-    canvas.width = 1;
-    canvas.height = 1;
-  }
+function stopPatientScanner() {
+  closePatientScanner();
 }
 
 function privacyNote() {

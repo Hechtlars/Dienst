@@ -388,3 +388,26 @@ dialog.action-sheet-open button {
 .scanner-video-wrap video{width:100%;height:100%;object-fit:cover}
 .scanner-guide{position:absolute;left:6%;right:6%;top:40%;height:20%;border:2px solid rgba(255,255,255,.95);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.28)}
 .scanner-guide::after{content:"PATIENTEN-ID";position:absolute;left:50%;top:-28px;transform:translateX(-50%);color:#fff;font-size:12px;font-weight:800;letter-spacing:.08em;text-shadow:0 1px 3px #000}
+
+.patient-scanner-overlay{position:fixed;inset:0;z-index:10000;background:#000;display:flex;align-items:stretch;justify-content:center}
+.patient-scanner-panel{width:100%;max-width:620px;min-height:100dvh;background:#000;color:#fff;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.scanner-topbar{display:grid;grid-template-columns:48px 1fr 48px;align-items:center;padding:10px 12px 12px;text-align:center}
+.scanner-close{width:42px;height:42px;border:0;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:30px;line-height:1}
+.scanner-title{font-size:18px;font-weight:800}
+.scanner-subtitle{font-size:12px;color:rgba(255,255,255,.72);margin-top:2px}
+.scanner-spacer{width:42px}
+.patient-scanner-overlay .scanner-video-wrap{position:relative;width:100%;flex:1;min-height:360px;max-height:none;aspect-ratio:auto;border-radius:0;overflow:hidden;background:#111}
+.patient-scanner-overlay .scanner-video-wrap video{width:100%;height:100%;object-fit:cover}
+.patient-scanner-overlay .scanner-guide{position:absolute;left:5%;right:5%;top:41%;height:18%;border:3px solid #fff;border-radius:14px;box-shadow:none;transform:none}
+.patient-scanner-overlay .scanner-guide::after{display:none}
+.patient-scanner-overlay .scanner-guide span{position:absolute;left:50%;bottom:-29px;transform:translateX(-50%);font-size:12px;letter-spacing:.18em;color:rgba(255,255,255,.72)}
+.scanner-shade{position:absolute;left:0;right:0;background:rgba(0,0,0,.42);pointer-events:none}
+.scanner-shade-top{top:0;height:41%}
+.scanner-shade-bottom{top:59%;bottom:0}
+.scanner-status{min-height:44px;padding:12px 18px 5px;text-align:center;font-size:14px;color:rgba(255,255,255,.82)}
+.scanner-status.scanner-success{color:#7ee787;font-weight:800}
+.scanner-status.scanner-error{color:#ffb4ab}
+.scanner-actions{padding:8px 16px;display:grid;gap:8px}
+.patient-scanner-overlay .primary{width:100%}
+.patient-scanner-overlay .secondary-button{width:100%;background:rgba(255,255,255,.13);color:#fff;border-color:rgba(255,255,255,.2)}
+.scanner-privacy{padding:4px 22px 12px;text-align:center;font-size:11px;line-height:1.35;color:rgba(255,255,255,.58)}

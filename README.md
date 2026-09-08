@@ -88,3 +88,13 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - In der Detailansicht eines früheren Dienstes gibt es nun direkt „+ Einsatz hinzufügen“.
 - Bereits vorhandene Einsätze können weiterhin durch Antippen bzw. über das Kontextmenü bearbeitet werden.
 - Beim nachträglichen Hinzufügen werden Datum und Uhrzeit weiterhin gegen den Zeitraum des ausgewählten Dienstes geprüft.
+
+
+## Version 7.8
+- Patienten-ID-Scanner repariert: Die OCR-Bibliothek wird nun tatsächlich geladen.
+- Automatische Erkennung startet nach Öffnen des Scanners und versucht die ID regelmäßig zu lesen.
+- „Jetzt erfassen“ löst zusätzlich eine sofortige Erkennung aus.
+- Der ausgewertete Kamerabereich entspricht dem sichtbaren Scanrahmen.
+- Schonendere Bildaufbereitung statt harter Schwarz-Weiß-Umwandlung, insbesondere für IDs auf Monitoren.
+- Scanner liegt als eigenes Overlay über dem Einsatzformular; vorhandene Formulardaten und Bearbeitungsfunktionen bleiben erhalten.
+- Kein Foto wird gespeichert; temporäre Scanbilder werden nach jedem Erkennungsversuch verworfen.
