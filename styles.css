@@ -505,3 +505,17 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
   white-space:nowrap;
   font-size:11px;
 }
+
+/* Version 7.15: größerer Scanbereich für mehr Kameraabstand */
+.patient-scanner-overlay .scanner-guide{
+  left:2.5%;
+  right:2.5%;
+  top:36%;
+  height:28%;
+}
+.scanner-shade-top{height:36%}
+.scanner-shade-bottom{top:64%}
+.patient-scanner-overlay .scanner-guide span{
+  bottom:-32px;
+  font-size:11px;
+}

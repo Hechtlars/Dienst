@@ -146,3 +146,13 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Eine ID gilt erst als sicher, wenn sie innerhalb desselben Bildes mehrfach identisch erkannt wird und zusätzlich in einem weiteren Kameraframe bestätigt wurde.
 - Getrennte Ziffernfragmente werden weiterhin niemals zu einer ID zusammengesetzt.
 - Vor Übernahme bleibt die manuelle Bestätigung der erkannten Patienten-ID bestehen.
+
+
+## Version 7.15
+- Scanner auf größere Kameraentfernung optimiert, damit die iPhone-Kamera nicht mehr in den unscharfen Nahbereich gezwungen wird.
+- Höhere gewünschte Kameraauflösung (bis 4K, sofern vom Gerät/Browser unterstützt).
+- Kontinuierlicher Fokus und moderater digitaler Zoom werden verwendet, sofern Safari/iOS dies unterstützt.
+- Deutlich größerer sichtbarer Scanrahmen.
+- Der Scanner prüft mehrere leicht versetzte Teilbereiche innerhalb des Rahmens, damit die ID nicht exakt zentriert werden muss.
+- Stärkere digitale Vergrößerung und moderate Schärfung vor der OCR.
+- Sicherheitslogik bleibt erhalten: nur zusammenhängende IDs ab 9 Ziffern, mehrfach übereinstimmende Erkennung und Bestätigung vor Übernahme.
