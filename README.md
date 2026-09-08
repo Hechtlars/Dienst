@@ -98,3 +98,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Schonendere Bildaufbereitung statt harter Schwarz-Weiß-Umwandlung, insbesondere für IDs auf Monitoren.
 - Scanner liegt als eigenes Overlay über dem Einsatzformular; vorhandene Formulardaten und Bearbeitungsfunktionen bleiben erhalten.
 - Kein Foto wird gespeichert; temporäre Scanbilder werden nach jedem Erkennungsversuch verworfen.
+
+
+## Version 7.9
+- Scanner-Ebenenfehler behoben: Der Patienten-ID-Scanner wird als eigenes modales Browser-Dialogfenster in der obersten Ebene geöffnet.
+- Die Maske „Einsatz erfassen/bearbeiten“ bleibt darunter erhalten, kann den Scanner aber nicht mehr überdecken.
+- Nach Erkennung oder Abbruch erscheint das Einsatzformular wieder mit den bisherigen Eingaben.
+- Die Raute am Patienten-ID-Feld wurde durch ein schlichtes monochromes Kamera-Symbol ersetzt.

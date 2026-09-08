@@ -411,3 +411,25 @@ dialog.action-sheet-open button {
 .patient-scanner-overlay .primary{width:100%}
 .patient-scanner-overlay .secondary-button{width:100%;background:rgba(255,255,255,.13);color:#fff;border-color:rgba(255,255,255,.2)}
 .scanner-privacy{padding:4px 22px 12px;text-align:center;font-size:11px;line-height:1.35;color:rgba(255,255,255,.58)}
+
+.patient-scan-button{display:grid;place-items:center}
+.patient-camera-icon{width:23px;height:23px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.patient-camera-icon circle{fill:none}
+
+dialog.patient-scanner-overlay{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  max-width:none;
+  height:100dvh;
+  max-height:none;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:#000;
+  overflow:hidden;
+}
+dialog.patient-scanner-overlay::backdrop{background:#000}
+dialog.patient-scanner-overlay[open]{display:flex;align-items:stretch;justify-content:center}
+dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:100dvh}

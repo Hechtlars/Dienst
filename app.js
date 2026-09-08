@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.8';
+const APP_VERSION = '7.9';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -767,7 +767,10 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-id-row">
         <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern">
-        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen">⌗</button>
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
+          <circle cx="12" cy="13" r="3.6"/>
+        </svg></button>
         <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
       </div>
     </label>
@@ -820,7 +823,10 @@ function openEditEntry(dutyId, entryId) {
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-id-row">
         <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern" value="${escapeHtml(entry.patientId || '')}">
-        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen">⌗</button>
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
+          <circle cx="12" cy="13" r="3.6"/>
+        </svg></button>
         <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
       </div>
     </label>
@@ -887,9 +893,10 @@ async function openPatientIdScanner() {
 
   closePatientScanner();
 
-  const overlay = document.createElement('div');
+  const overlay = document.createElement('dialog');
   overlay.id = 'patientScannerOverlay';
   overlay.className = 'patient-scanner-overlay';
+  overlay.setAttribute('aria-label', 'Patienten-ID scannen');
   overlay.innerHTML = `<div class="patient-scanner-panel">
     <div class="scanner-topbar">
       <button type="button" class="scanner-close" id="cancelPatientScan" aria-label="Scanner schließen">×</button>
@@ -916,6 +923,9 @@ async function openPatientIdScanner() {
     <div class="scanner-privacy">Kein Foto wird gespeichert. Übernommen wird ausschließlich die erkannte Patienten-ID.</div>
   </div>`;
   document.body.appendChild(overlay);
+  // A modal <dialog> is promoted to the browser top layer and therefore reliably
+  // covers the already open "Einsatz erfassen/bearbeiten" dialog on iOS/Safari.
+  overlay.showModal();
 
   document.getElementById('cancelPatientScan').onclick = closePatientScanner;
   document.getElementById('enterPatientIdManually').onclick = closePatientScanner;
@@ -1081,7 +1091,10 @@ async function closePatientScanner() {
   }
   patientScanBusy = false;
   const overlay = document.getElementById('patientScannerOverlay');
-  if (overlay) overlay.remove();
+  if (overlay) {
+    try { if (overlay.open) overlay.close(); } catch (_) {}
+    overlay.remove();
+  }
   patientScanTarget = null;
 }
 
