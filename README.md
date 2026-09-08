@@ -254,3 +254,19 @@ Neue Patienten-ID-Funktion:
 5. Ausschnitt später beim Einsatz anzeigen.
 
 Es gibt keine OCR, keine Ziffernerkennung, kein Tesseract, kein PaddleOCR und keinen externen Erkennungsdienst. Das vollständige Foto wird nicht dauerhaft gespeichert. Der gewählte Ausschnitt wird auf maximal 700 Pixel Breite reduziert und als komprimiertes JPEG gespeichert.
+
+
+## Version 7.28 – Patienten-ID-Foto neu geprüft
+- Frühere Scan-/OCR-Logik vollständig aus dem ausführbaren Code entfernt.
+- Kamera-Button ist direkt mit der neuen Foto-Funktion verbunden.
+- Ablauf: Foto aufnehmen → Ausschnitt selbst festlegen → nur Ausschnitt speichern → dem Einsatz zuordnen.
+- Beim Bearbeiten wird der vorhandene Ausschnitt geladen und kann entfernt/ersetzt werden.
+- In der Einsatzübersicht kann der Ausschnitt über „Patienten-ID anzeigen“ geöffnet werden.
+
+
+## Version 7.29
+- Manueller Patienten-ID-Ausschnitt auf iPhone nochmals geprüft und robuster gemacht.
+- Der weiße Auswahlrahmen lässt sich durch Ziehen innerhalb des Rahmens frei nach oben und unten verschieben, ausdrücklich auch bis an den unteren Rand.
+- Größenänderung über alle vier Eckpunkte.
+- Pointer-Capture plus Touch-Fallback für Safari/iPhone.
+- Während des Verschiebens scrollt nicht versehentlich die Seite.

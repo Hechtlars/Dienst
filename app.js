@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.27';
+const APP_VERSION = '7.29';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -495,6 +495,7 @@ function entryRow(duty, entry, withDelete) {
         <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
         <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
         ${entry.patientId ? `<div class="entry-note">Patienten-ID: ${escapeHtml(entry.patientId)}</div>` : ''}
+        ${entry.patientIdPhoto ? `<button type="button" class="entry-photo-link" data-photo-duty="${escapeHtml(duty.id)}" data-photo-entry="${escapeHtml(entry.id)}">📷 Patienten-ID anzeigen</button>` : ''}
         ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
       </div>
       <div class="row-value">${minutes(entry)} Min.</div>
@@ -614,6 +615,7 @@ function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
   content.addEventListener('pointermove', event => { if (event.pointerType === 'mouse') move(event); });
   content.addEventListener('pointerup', event => { if (event.pointerType === 'mouse') end(event); });
   content.addEventListener('click', event => {
+    if (event.target.closest?.('.entry-photo-link')) return;
     if (moved || longPressed || item.classList.contains('open')) { event.preventDefault(); if (item.classList.contains('open')) close(); return; }
     onOpen();
   });
@@ -765,26 +767,33 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
     <label class="field"><span>Patienten-ID (optional)</span>
-      <div class="patient-id-row">
-        <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern">
+      <div class="patient-photo-entry-row">
         <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
           <circle cx="12" cy="13" r="3.6"/>
-        </svg></button>
-        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
+        </svg><span>Foto aufnehmen</span></button>
+        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zur Patienten-ID">i</button>
       </div>
-        <input type="hidden" id="entryPatientIdPhoto">
-        <div id="entryPatientIdPhotoPreviewWrap" class="patient-id-photo-preview-wrap" hidden>
-          <div class="patient-id-photo-preview-label">Foto der Patienten-ID</div>
-          <img id="entryPatientIdPhotoPreview" class="patient-id-photo-preview" alt="Foto der Patienten-ID">
-          <button type="button" id="removePatientIdPhoto" class="secondary-button patient-id-photo-remove">Foto entfernen</button>
-        </div>
+      <input type="hidden" id="entryPatientIdPhoto">
+      <div id="entryPatientIdPhotoPreviewWrap" class="patient-id-photo-preview-wrap" hidden>
+        <div class="patient-id-photo-preview-label">Gespeicherter Ausschnitt</div>
+        <img id="entryPatientIdPhotoPreview" class="patient-id-photo-preview" alt="Foto der Patienten-ID">
+        <button type="button" id="removePatientIdPhoto" class="secondary-button patient-id-photo-remove">Foto entfernen</button>
+      </div>
     </label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP"></textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  if (typeof entry !== 'undefined' && entry?.patientIdPhoto) {
+    const photoInput = document.getElementById('entryPatientIdPhoto');
+    const photoPreview = document.getElementById('entryPatientIdPhotoPreview');
+    const photoWrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+    if (photoInput) photoInput.value = entry.patientIdPhoto;
+    if (photoPreview) photoPreview.src = entry.patientIdPhoto;
+    if (photoWrap) photoWrap.hidden = false;
+  }
   bindPatientIdTools();
   for (const button of modalContent.querySelectorAll('[data-type]')) {
     button.onclick = () => {
@@ -796,18 +805,17 @@ function openNewEntry(dutyId) {
     const date = document.getElementById('entryDate').value;
     const startTime = document.getElementById('entryStart').value;
     const endTime = document.getElementById('entryEnd').value;
-    const patientId = document.getElementById('entryPatientId').value.trim();
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError');
     error.textContent = '';
     if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
-    if (patientId && !/^\d{9,}$/.test(patientId)) { error.textContent = 'Wenn eine Patienten-ID angegeben wird, muss sie aus mindestens 9 Ziffern bestehen.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`);
     const endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
     if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
-    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), patientId, note });
+    const patientIdPhoto = document.getElementById('entryPatientIdPhoto')?.value || '';
+    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), patientIdPhoto, note });
     saveState();
     modal.close();
     render();
@@ -827,13 +835,18 @@ function openEditEntry(dutyId, entryId) {
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(start.getHours())}:${pad(start.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(end.getHours())}:${pad(end.getMinutes())}"></label>
     <label class="field"><span>Patienten-ID (optional)</span>
-      <div class="patient-id-row">
-        <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern" value="${escapeHtml(entry.patientId || '')}">
+      <div class="patient-photo-entry-row">
         <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
           <circle cx="12" cy="13" r="3.6"/>
-        </svg></button>
-        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
+        </svg><span>Foto aufnehmen</span></button>
+        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zur Patienten-ID">i</button>
+      </div>
+      <input type="hidden" id="entryPatientIdPhoto">
+      <div id="entryPatientIdPhotoPreviewWrap" class="patient-id-photo-preview-wrap" hidden>
+        <div class="patient-id-photo-preview-label">Gespeicherter Ausschnitt</div>
+        <img id="entryPatientIdPhotoPreview" class="patient-id-photo-preview" alt="Foto der Patienten-ID">
+        <button type="button" id="removePatientIdPhoto" class="secondary-button patient-id-photo-remove">Foto entfernen</button>
       </div>
     </label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP">${escapeHtml(entry.note || '')}</textarea></label>
@@ -841,6 +854,14 @@ function openEditEntry(dutyId, entryId) {
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  if (typeof entry !== 'undefined' && entry?.patientIdPhoto) {
+    const photoInput = document.getElementById('entryPatientIdPhoto');
+    const photoPreview = document.getElementById('entryPatientIdPhotoPreview');
+    const photoWrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+    if (photoInput) photoInput.value = entry.patientIdPhoto;
+    if (photoPreview) photoPreview.src = entry.patientIdPhoto;
+    if (photoWrap) photoWrap.hidden = false;
+  }
   bindPatientIdTools();
   for (const button of modalContent.querySelectorAll('[data-type]')) button.onclick = () => {
     type = button.dataset.type;
@@ -850,114 +871,30 @@ function openEditEntry(dutyId, entryId) {
     const date = document.getElementById('entryDate').value;
     const startTime = document.getElementById('entryStart').value;
     const endTime = document.getElementById('entryEnd').value;
-    const patientId = document.getElementById('entryPatientId').value.trim();
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError'); error.textContent = '';
     if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
-    if (patientId && !/^\d{9,}$/.test(patientId)) { error.textContent = 'Wenn eine Patienten-ID angegeben wird, muss sie aus mindestens 9 Ziffern bestehen.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`), endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
     if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
-    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), patientId, note });
+    const patientIdPhoto = document.getElementById('entryPatientIdPhoto')?.value || '';
+    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), patientIdPhoto, note });
     saveState(); haptic(); modal.close(); render();
   };
 }
 
 
-let patientScanTimer = null;
-let patientScanTarget = null;
-let patientScanCandidate = '';
-let patientScanCandidateHits = 0;
-  if (previewWrap) previewWrap.hidden = true;
-  if (preview) preview.removeAttribute('src');
-
 function bindPatientIdTools() {
-  const input = document.getElementById('entryPatientId');
-  const scanButton = document.getElementById('scanPatientId');
+  const photoButton = document.getElementById('scanPatientId');
   const infoButton = document.getElementById('patientScanInfo');
-  if (input) {
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '');
-    });
-  }
-  if (scanButton) scanButton.onclick = openPatientIdKamera;
-  if (infoButton) infoButton.onclick = showPatientScanInfo;
+  if (photoButton) photoButton.onclick = openPatientPhotoCamera;
+  if (infoButton) infoButton.onclick = showPatientPhotoInfo;
 }
 
-function showPatientScanInfo() {
-  alert('Patienten-ID fotografieren\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs findet keine Texterkennung statt. Gespeichert wird nur der Bildausschnitt innerhalb des weißen Rahmens – lokal auf diesem Gerät. Es erfolgt kein Upload und keine Cloud-Synchronisierung.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
+function showPatientPhotoInfo() {
+  alert('Patienten-ID fotografieren\n\nEs gibt keine Texterkennung und keine automatische Auswahl. Nach der Aufnahme legst du den Ausschnitt selbst fest. Gespeichert wird ausschließlich dieser kleine Bildausschnitt lokal zusammen mit dem jeweiligen Einsatz. Das vollständige Foto wird danach verworfen.');
 }
-
-
-
-
-
-function showPatientOcrPreviewFromCanvas(canvas) {
-  if (!wrap || !img || !canvas?.width || !canvas?.height) return;
-  try {
-    img.src = canvas.toDataURL('image/jpeg', 0.92);
-    wrap.hidden = false;
-  } catch (error) {
-    console.debug('OCR-Vorschau konnte nicht erstellt werden:', error);
-  }
-}
-
-
-
-
-
-function showPatientIdConfirmation(id) {
-  if (patientScanTimer) {
-    window.clearInterval(patientScanTimer);
-    patientScanTimer = null;
-  }
-  const panel = document.querySelector('#patientKameraOverlay .patient-camera-panel');
-  if (!panel) return;
-
-  const status = document.getElementById('cameraStatus');
-  if (status) {
-    status.textContent = `Erkannt: ${id}`;
-    status.classList.add('camera-success');
-  }
-
-  let confirmation = document.getElementById('patientIdConfirmation');
-  if (!confirmation) {
-    confirmation = document.createElement('div');
-    confirmation.id = 'patientIdConfirmation';
-    confirmation.className = 'patient-id-confirmation';
-    const actions = panel.querySelector('.camera-actions');
-    if (actions) actions.replaceWith(confirmation);
-    else panel.appendChild(confirmation);
-  }
-
-  confirmation.innerHTML = `
-    <div class="patient-id-confirmation-label">Erkannte Patienten-ID</div>
-    <div class="patient-id-confirmation-number">${escapeHtml(id)}</div>
-    <div class="patient-id-confirmation-hint">Bitte Nummer kurz mit der Anzeige abgleichen.</div>
-    <button type="button" class="primary" id="confirmPatientId">Übernehmen</button>
-    <button type="button" class="secondary-button" id="retryPatientId">Erneut scannen</button>`;
-
-  document.getElementById('confirmPatientId').onclick = () => {
-    haptic();
-    closePatientKamera(true);
-  };
-  document.getElementById('retryPatientId').onclick = () => {
-    patientScanCandidate = '';
-    patientScanCandidateHits = 0;
-    confirmation.innerHTML = `
-      <button type="button" class="primary" id="capturePatientId">Foto aufnehmen</button>
-      <button type="button" class="secondary-button" id="enterPatientIdManually">Abbrechen</button>`;
-            if (status) {
-      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto aufnehmen“ tippen.';
-      status.classList.remove('camera-success');
-    }
-  };
-}
-
-
-
-
 
 function privacyNote() {
   return `<div class="privacy-note"><span aria-hidden="true">🔒</span><span>Alle Dienste und Einsätze werden ausschließlich lokal auf diesem Gerät gespeichert. Es findet keine Cloud-Synchronisierung und keine Übertragung an GitHub statt.</span></div>`;
@@ -1277,26 +1214,6 @@ modal.addEventListener('close', () => {
 });
 
 
-document.addEventListener('click', (event) => {
-  if (event.target && event.target.id === 'removePatientIdPhoto') {
-    const input = document.getElementById('entryPatientIdPhoto');
-    const preview = document.getElementById('entryPatientIdPhotoPreview');
-    const wrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
-    if (input) input.value = '';
-    if (preview) preview.removeAttribute('src');
-    if (wrap) wrap.hidden = true;
-  }
-});
-
-
-
-
-
-
-
-
-
-
 let patientPhotoStream = null;
 let patientPhotoTempImage = '';
 let patientPhotoCrop = { x: .08, y: .36, w: .84, h: .28 };
@@ -1359,65 +1276,143 @@ function takePatientPhoto() {
 }
 
 function patientPhotoCropUi() {
-  let d=document.getElementById('patientPhotoCrop');
-  if(d) return d;
-  d=document.createElement('dialog');
-  d.id='patientPhotoCrop';
-  d.className='patient-photo-crop';
-  d.innerHTML=`
+  let d = document.getElementById('patientPhotoCrop');
+  if (d) return d;
+
+  d = document.createElement('dialog');
+  d.id = 'patientPhotoCrop';
+  d.className = 'patient-photo-crop';
+  d.innerHTML = `
     <div class="pp-crop-shell">
       <div class="pp-head">
         <button type="button" id="ppCropCancel">Abbrechen</button>
         <strong>Ausschnitt festlegen</strong>
         <button type="button" id="ppCropSave">Übernehmen</button>
       </div>
-      <p class="pp-help">Verschiebe den weißen Rahmen und ändere seine Größe an den vier Ecken. Gespeichert wird nur der Inhalt dieses Rahmens.</p>
+      <p class="pp-help">
+        Den weißen Rahmen mit dem Finger verschieben. An den vier Kreisen kannst du ihn größer oder kleiner ziehen.
+      </p>
       <div id="ppStage" class="pp-stage">
         <img id="ppImage" alt="">
-        <div id="ppBox" class="pp-box">
+        <div id="ppBox" class="pp-box" aria-label="Auswahlrahmen">
           <i data-h="tl"></i><i data-h="tr"></i><i data-h="bl"></i><i data-h="br"></i>
         </div>
       </div>
+      <p class="pp-help pp-crop-hint">
+        Der Rahmen kann auch ganz nach unten verschoben werden. Gespeichert wird nur der Inhalt innerhalb des Rahmens.
+      </p>
     </div>`;
+
   document.body.appendChild(d);
-  const stage=d.querySelector('#ppStage'), box=d.querySelector('#ppBox');
-  const render=()=>{
-    box.style.left=patientPhotoCrop.x*100+'%';
-    box.style.top=patientPhotoCrop.y*100+'%';
-    box.style.width=patientPhotoCrop.w*100+'%';
-    box.style.height=patientPhotoCrop.h*100+'%';
+
+  const stage = d.querySelector('#ppStage');
+  const box = d.querySelector('#ppBox');
+
+  const render = () => {
+    box.style.left = `${patientPhotoCrop.x * 100}%`;
+    box.style.top = `${patientPhotoCrop.y * 100}%`;
+    box.style.width = `${patientPhotoCrop.w * 100}%`;
+    box.style.height = `${patientPhotoCrop.h * 100}%`;
   };
-  const pos=e=>{
-    const r=stage.getBoundingClientRect(), p=e.touches?.[0]||e;
-    return {x:(p.clientX-r.left)/r.width,y:(p.clientY-r.top)/r.height};
+
+  const normalizedPoint = (clientX, clientY) => {
+    const r = stage.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width))),
+      y: Math.max(0, Math.min(1, (clientY - r.top) / Math.max(1, r.height)))
+    };
   };
-  const down=e=>{
-    const p=pos(e);
-    patientPhotoDrag={h:e.target.dataset.h||'move',x:p.x,y:p.y,r:{...patientPhotoCrop}};
-    e.preventDefault();
+
+  const beginDrag = (clientX, clientY, handle, pointerId = null) => {
+    const p = normalizedPoint(clientX, clientY);
+    patientPhotoDrag = {
+      h: handle || 'move',
+      x: p.x,
+      y: p.y,
+      r: { ...patientPhotoCrop },
+      pointerId
+    };
   };
-  const move=e=>{
-    if(!patientPhotoDrag)return;
-    const p=pos(e), q=patientPhotoDrag, dx=p.x-q.x, dy=p.y-q.y, r=q.r;
-    let l=r.x,t=r.y,rr=r.x+r.w,b=r.y+r.h;
-    if(q.h==='move'){
-      l=Math.max(0,Math.min(1-r.w,r.x+dx)); t=Math.max(0,Math.min(1-r.h,r.y+dy));
-      patientPhotoCrop={x:l,y:t,w:r.w,h:r.h};
+
+  const updateDrag = (clientX, clientY) => {
+    if (!patientPhotoDrag) return;
+
+    const p = normalizedPoint(clientX, clientY);
+    const q = patientPhotoDrag;
+    const dx = p.x - q.x;
+    const dy = p.y - q.y;
+    const r = q.r;
+    const minW = 0.15;
+    const minH = 0.08;
+
+    let left = r.x;
+    let top = r.y;
+    let right = r.x + r.w;
+    let bottom = r.y + r.h;
+
+    if (q.h === 'move') {
+      left = Math.max(0, Math.min(1 - r.w, r.x + dx));
+      top = Math.max(0, Math.min(1 - r.h, r.y + dy));
+      patientPhotoCrop = { x: left, y: top, w: r.w, h: r.h };
     } else {
-      if(q.h.includes('l'))l=Math.max(0,Math.min(rr-.15,r.x+dx));
-      if(q.h.includes('r'))rr=Math.min(1,Math.max(l+.15,r.x+r.w+dx));
-      if(q.h.includes('t'))t=Math.max(0,Math.min(b-.08,r.y+dy));
-      if(q.h.includes('b'))b=Math.min(1,Math.max(t+.08,r.y+r.h+dy));
-      patientPhotoCrop={x:l,y:t,w:rr-l,h:b-t};
+      if (q.h.includes('l')) left = Math.max(0, Math.min(right - minW, r.x + dx));
+      if (q.h.includes('r')) right = Math.min(1, Math.max(left + minW, r.x + r.w + dx));
+      if (q.h.includes('t')) top = Math.max(0, Math.min(bottom - minH, r.y + dy));
+      if (q.h.includes('b')) bottom = Math.min(1, Math.max(top + minH, r.y + r.h + dy));
+      patientPhotoCrop = { x: left, y: top, w: right - left, h: bottom - top };
     }
-    render(); e.preventDefault();
+
+    render();
   };
-  box.addEventListener('pointerdown',down);
-  window.addEventListener('pointermove',move,{passive:false});
-  window.addEventListener('pointerup',()=>patientPhotoDrag=null);
-  d.querySelector('#ppCropCancel').onclick=()=>{patientPhotoTempImage='';d.close();};
-  d.querySelector('#ppCropSave').onclick=savePatientPhotoCrop;
-  d._render=render;
+
+  // Pointer Events (iOS Safari supports these; pointer capture prevents losing the drag).
+  box.addEventListener('pointerdown', (e) => {
+    const handle = e.target?.dataset?.h || 'move';
+    beginDrag(e.clientX, e.clientY, handle, e.pointerId);
+    try { box.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+  });
+
+  box.addEventListener('pointermove', (e) => {
+    if (!patientPhotoDrag || patientPhotoDrag.pointerId !== e.pointerId) return;
+    updateDrag(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+
+  const finishPointer = (e) => {
+    if (!patientPhotoDrag) return;
+    try { box.releasePointerCapture(e.pointerId); } catch (_) {}
+    patientPhotoDrag = null;
+  };
+  box.addEventListener('pointerup', finishPointer);
+  box.addEventListener('pointercancel', finishPointer);
+
+  // Touch fallback for older/inconsistent iPhone WebKit behavior.
+  box.addEventListener('touchstart', (e) => {
+    if (!e.touches?.length) return;
+    const t = e.touches[0];
+    const handle = e.target?.dataset?.h || 'move';
+    beginDrag(t.clientX, t.clientY, handle, 'touch');
+    e.preventDefault();
+  }, { passive: false });
+
+  box.addEventListener('touchmove', (e) => {
+    if (!patientPhotoDrag || patientPhotoDrag.pointerId !== 'touch' || !e.touches?.length) return;
+    const t = e.touches[0];
+    updateDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+
+  box.addEventListener('touchend', () => { patientPhotoDrag = null; }, { passive: false });
+  box.addEventListener('touchcancel', () => { patientPhotoDrag = null; }, { passive: false });
+
+  d.querySelector('#ppCropCancel').onclick = () => {
+    patientPhotoTempImage = '';
+    patientPhotoDrag = null;
+    d.close();
+  };
+  d.querySelector('#ppCropSave').onclick = savePatientPhotoCrop;
+  d._render = render;
   return d;
 }
 
@@ -1453,10 +1448,6 @@ function savePatientPhotoCrop() {
   d.close();
 }
 
-function patientIdPhotoHtml(entry) {
-  return entry?.patientIdPhoto ? `<button type="button" class="entry-patient-photo pp-view-photo"><img src="${entry.patientIdPhoto}" alt="Patienten-ID"><span>Patienten-ID anzeigen</span></button>` : '';
-}
-
 function showPatientPhoto(src) {
   let d=document.getElementById('ppViewer');
   if(!d){
@@ -1468,15 +1459,23 @@ function showPatientPhoto(src) {
   d.querySelector('#ppViewerImg').src=src; d.showModal();
 }
 
-document.addEventListener('click',e=>{
-  const trigger=e.target.closest?.('[data-patient-photo], .pp-view-photo');
-  if(trigger){
-    const src=trigger.dataset.patientPhoto || trigger.querySelector('img')?.src;
-    if(src)showPatientPhoto(src);
+document.addEventListener('click', e => {
+  const viewButton = e.target.closest?.('.entry-photo-link');
+  if (viewButton) {
+    e.preventDefault();
+    e.stopPropagation();
+    const duty = state.duties.find(item => item.id === viewButton.dataset.photoDuty);
+    const entry = duty?.entries.find(item => item.id === viewButton.dataset.photoEntry);
+    if (entry?.patientIdPhoto) showPatientPhoto(entry.patientIdPhoto);
+    return;
   }
-  if(e.target?.id==='removePatientIdPhoto'){
-    const input=document.getElementById('entryPatientIdPhoto'), preview=document.getElementById('entryPatientIdPhotoPreview'), wrap=document.getElementById('entryPatientIdPhotoPreviewWrap');
-    if(input)input.value=''; if(preview)preview.removeAttribute('src'); if(wrap)wrap.hidden=true;
+  if (e.target?.id === 'removePatientIdPhoto') {
+    const input = document.getElementById('entryPatientIdPhoto');
+    const preview = document.getElementById('entryPatientIdPhotoPreview');
+    const wrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+    if (input) input.value = '';
+    if (preview) preview.removeAttribute('src');
+    if (wrap) wrap.hidden = true;
   }
 });
 
