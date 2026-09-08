@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.13';
+const APP_VERSION = '7.14';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -908,7 +908,7 @@ async function openPatientIdScanner() {
       <button type="button" class="scanner-close" id="cancelPatientScan" aria-label="Scanner schließen">×</button>
       <div>
         <div class="scanner-title">Patienten-ID scannen</div>
-        <div class="scanner-subtitle">Mindestens 9 Ziffern in den Rahmen halten</div>
+        <div class="scanner-subtitle">Patienten-ID vollständig in den Rahmen halten</div>
       </div>
       <span class="scanner-spacer" aria-hidden="true"></span>
     </div>
@@ -917,7 +917,7 @@ async function openPatientIdScanner() {
       <div class="scanner-shade scanner-shade-top"></div>
       <div class="scanner-shade scanner-shade-bottom"></div>
       <div class="scanner-guide" aria-hidden="true">
-        <span>123456789</span>
+        <span>Patienten-ID vollständig im Rahmen</span>
       </div>
     </div>
     <canvas id="patientScannerCanvas" hidden></canvas>
@@ -994,9 +994,11 @@ async function scanPatientFrame(manual) {
 
   const video = document.getElementById('patientScannerVideo');
   const canvas = document.getElementById('patientScannerCanvas');
+  const guide = document.querySelector('#patientScannerOverlay .scanner-guide');
   const status = document.getElementById('scannerStatus');
   const button = document.getElementById('capturePatientId');
-  if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+
+  if (!video || !canvas || !guide || !video.videoWidth || !video.videoHeight) {
     if (manual && status) status.textContent = 'Kamerabild noch nicht bereit. Bitte kurz warten.';
     return;
   }
@@ -1009,77 +1011,140 @@ async function scanPatientFrame(manual) {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // Der ausgewertete Bereich entspricht dem sichtbaren horizontalen Scanrahmen.
-    // Breit, aber bewusst niedrig, damit umliegende Namen/Geburtsdaten nicht Teil der OCR sind.
-    const cropW = Math.round(vw * 0.94);
-    const cropH = Math.round(vh * 0.16);
-    const sx = Math.round((vw - cropW) / 2);
-    const sy = Math.round((vh - cropH) / 2);
+    // WICHTIG:
+    // Das <video> wird mit object-fit: cover dargestellt. Deshalb ist der sichtbare
+    // weiße Rahmen NICHT einfach derselbe Prozentbereich des Kamera-Rohbilds.
+    // Hier wird der sichtbare Rahmen pixelgenau zurück in die Rohbild-Koordinaten
+    // umgerechnet, inklusive des iPhone/Safari-"cover"-Zuschnitts.
+    const videoRect = video.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+    const displayW = videoRect.width;
+    const displayH = videoRect.height;
 
-    // Hochskalieren verbessert kleine Monitor-Schriften und reduziert OCR-Aussetzer.
-    const scale = cropW < 1400 ? 2 : 1.35;
-    canvas.width = Math.round(cropW * scale);
-    canvas.height = Math.round(cropH * scale);
+    const coverScale = Math.max(displayW / vw, displayH / vh);
+    const renderedW = vw * coverScale;
+    const renderedH = vh * coverScale;
+    const cropOffsetX = (renderedW - displayW) / 2;
+    const cropOffsetY = (renderedH - displayH) / 2;
+
+    const guideLeftInVideo = guideRect.left - videoRect.left;
+    const guideTopInVideo = guideRect.top - videoRect.top;
+
+    let sx = (guideLeftInVideo + cropOffsetX) / coverScale;
+    let sy = (guideTopInVideo + cropOffsetY) / coverScale;
+    let cropW = guideRect.width / coverScale;
+    let cropH = guideRect.height / coverScale;
+
+    // Kleine Sicherheitszugabe innerhalb des sichtbaren Bereichs:
+    // horizontal fast volle Breite, vertikal etwas enger auf die Ziffernzeile.
+    const insetX = cropW * 0.015;
+    const insetY = cropH * 0.12;
+    sx += insetX;
+    sy += insetY;
+    cropW -= insetX * 2;
+    cropH -= insetY * 2;
+
+    sx = Math.max(0, Math.min(vw - 1, sx));
+    sy = Math.max(0, Math.min(vh - 1, sy));
+    cropW = Math.max(1, Math.min(vw - sx, cropW));
+    cropH = Math.max(1, Math.min(vh - sy, cropH));
+
+    // Deutlich hochskalieren: Monitor-Schrift wird dadurch für Tesseract stabiler.
+    const targetWidth = Math.min(2200, Math.max(1500, Math.round(cropW * 2.2)));
+    const scale = targetWidth / cropW;
+    canvas.width = targetWidth;
+    canvas.height = Math.max(220, Math.round(cropH * scale));
+
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-    // Moderate Graustufen-/Kontrastanhebung statt der früheren harten Schwarz-Weiß-Schwelle,
-    // die Monitor-Ziffern teilweise zerstört hat.
-    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = image.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
-      data[i] = data[i + 1] = data[i + 2] = contrasted;
-    }
-    ctx.putImageData(image, 0, 0);
-
-    let result = await patientOcrWorker.recognize(canvas);
-    let raw = String(result?.data?.text || '');
+    // Originalbild sichern, damit mehrere OCR-Varianten exakt denselben sichtbaren
+    // Scanbereich verwenden.
+    const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
     const extractPatientId = (text) => {
-      // Sicherheitsregel: Nur eine von OCR als zusammenhängende Ziffernfolge
-      // gelieferte ID akzeptieren. Keine getrennten Fragmente zusammenkleben.
-      const matches = String(text || '').match(/(?:^|[^\d])(\d{9,30})(?=$|[^\d])/g) || [];
-      const ids = matches
-        .map(value => (value.match(/\d{9,30}/) || [''])[0])
+      // Nur echte zusammenhängende Ziffernfolgen akzeptieren.
+      // Getrennte OCR-Fragmente werden niemals zusammengefügt.
+      const ids = [...String(text || '').matchAll(/(^|[^\d])(\d{9,30})(?=$|[^\d])/g)]
+        .map(match => match[2])
         .filter(Boolean);
       const unique = [...new Set(ids)];
       return unique.length === 1 ? unique[0] : '';
     };
 
-    let id = extractPatientId(raw);
+    const results = [];
 
-    // Zweiter Versuch für Monitorbilder: binarisieren + "single word".
-    // Das ist besonders robust bei großen, isolierten Ziffernfolgen.
-    if (!id) {
-      const image2 = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data2 = image2.data;
-      for (let i = 0; i < data2.length; i += 4) {
-        const gray = 0.299 * data2[i] + 0.587 * data2[i + 1] + 0.114 * data2[i + 2];
-        const value = gray > 145 ? 255 : 0;
-        data2[i] = data2[i + 1] = data2[i + 2] = value;
+    const runOcr = async (imageData, psm) => {
+      ctx.putImageData(imageData, 0, 0);
+      await patientOcrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: String(psm),
+        preserve_interword_spaces: '0'
+      });
+      const result = await patientOcrWorker.recognize(canvas);
+      const text = String(result?.data?.text || '');
+      const id = extractPatientId(text);
+      if (id) results.push(id);
+    };
+
+    // Variante 1: moderates Graustufenbild.
+    const gray = new ImageData(
+      new Uint8ClampedArray(original.data),
+      original.width,
+      original.height
+    );
+    for (let i = 0; i < gray.data.length; i += 4) {
+      const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
+      const value = Math.max(0, Math.min(255, (g - 128) * 1.35 + 128));
+      gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = value;
+    }
+    await runOcr(gray, 13);
+
+    // Variante 2: Schwellenwert für helle Monitor-Hintergründe.
+    const bw = new ImageData(
+      new Uint8ClampedArray(original.data),
+      original.width,
+      original.height
+    );
+    for (let i = 0; i < bw.data.length; i += 4) {
+      const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
+      const value = g > 155 ? 255 : 0;
+      bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = value;
+    }
+    await runOcr(bw, 8);
+
+    // Variante 3 nur dann, wenn die ersten beiden sich nicht einig sind:
+    // etwas niedrigerer Schwellenwert für dunklere / kontrastärmere Displays.
+    if (results.length < 2 || results[0] !== results[1]) {
+      const bw2 = new ImageData(
+        new Uint8ClampedArray(original.data),
+        original.width,
+        original.height
+      );
+      for (let i = 0; i < bw2.data.length; i += 4) {
+        const g = 0.299 * bw2.data[i] + 0.587 * bw2.data[i + 1] + 0.114 * bw2.data[i + 2];
+        const value = g > 135 ? 255 : 0;
+        bw2.data[i] = bw2.data[i + 1] = bw2.data[i + 2] = value;
       }
-      ctx.putImageData(image2, 0, 0);
-      await patientOcrWorker.setParameters({
-        tessedit_char_whitelist: '0123456789',
-        tessedit_pageseg_mode: '8',
-        preserve_interword_spaces: '0'
-      });
-      result = await patientOcrWorker.recognize(canvas);
-      raw = String(result?.data?.text || '');
-      id = extractPatientId(raw);
-
-      // Für den nächsten Scan wieder auf den primären Modus zurückstellen.
-      await patientOcrWorker.setParameters({
-        tessedit_char_whitelist: '0123456789',
-        tessedit_pageseg_mode: '13',
-        preserve_interword_spaces: '0'
-      });
+      await runOcr(bw2, 7);
     }
 
+    // Innerhalb DESSELBEN Bildes muss eine ID mindestens zweimal identisch erkannt
+    // worden sein. Das ist sicherer als nur zwei zeitlich getrennte Kameraframes.
+    const counts = results.reduce((map, id) => {
+      map[id] = (map[id] || 0) + 1;
+      return map;
+    }, {});
+    const sameFrameWinner = Object.entries(counts)
+      .filter(([, count]) => count >= 2)
+      .sort((x, y) => y[1] - x[1])[0]?.[0] || '';
+
+    let id = sameFrameWinner;
+
     if (id) {
+      // Zusätzlich über zwei Kameraframes absichern.
       if (patientScanCandidate === id) patientScanCandidateHits += 1;
       else {
         patientScanCandidate = id;
@@ -1088,11 +1153,10 @@ async function scanPatientFrame(manual) {
 
       if (patientScanCandidateHits < 2) {
         if (status) {
-          status.textContent = `Mögliche ID: ${id} – wird zur Sicherheit erneut geprüft …`;
+          status.textContent = `Mögliche ID: ${id} – wird noch einmal geprüft …`;
           status.classList.remove('scanner-success');
         }
-        // Bei manueller Erfassung direkt einen zweiten Kontrolllauf anstoßen.
-        if (manual) window.setTimeout(() => scanPatientFrame(false), 220);
+        if (manual) window.setTimeout(() => scanPatientFrame(false), 250);
         return;
       }
 
@@ -1101,14 +1165,13 @@ async function scanPatientFrame(manual) {
       return;
     }
 
-    // Ein fehlgeschlagener Durchlauf verwirft einen unsicheren Einzel-Treffer.
+    // Kein sicherer Konsens: nichts übernehmen.
     patientScanCandidate = '';
     patientScanCandidateHits = 0;
-
     if (status) {
       status.textContent = manual
-        ? 'Noch keine ID erkannt. Näher herangehen und die Ziffern mittig in den Rahmen halten.'
-        : 'Noch keine ID erkannt – bitte ruhig und mittig halten.';
+        ? 'Noch keine eindeutige ID erkannt. Bitte die Ziffern vollständig in den weißen Rahmen halten.'
+        : 'Noch keine eindeutige ID erkannt – bitte ruhig halten.';
     }
   } catch (error) {
     console.warn('OCR-Erkennung fehlgeschlagen', error);

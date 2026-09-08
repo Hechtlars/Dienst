@@ -488,3 +488,20 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
 }
 .patient-id-confirmation .primary,
 .patient-id-confirmation .secondary-button{width:100%}
+
+/* Version 7.14: sichtbarer Rahmen und OCR-Ausschnitt sind geometrisch gekoppelt */
+.patient-scanner-overlay .scanner-guide{
+  left:4%;
+  right:4%;
+  top:39%;
+  height:22%;
+  border-width:3px;
+}
+.scanner-shade-top{height:39%}
+.scanner-shade-bottom{top:61%}
+.patient-scanner-overlay .scanner-guide span{
+  bottom:-31px;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  font-size:11px;
+}

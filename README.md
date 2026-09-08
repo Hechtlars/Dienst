@@ -135,3 +135,14 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Danach wird die erkannte Nummer groß angezeigt und muss mit „Übernehmen“ bestätigt werden.
 - „Erneut scannen“ verwirft den Treffer.
 - Der Scanbereich bleibt breit, wurde vertikal aber wieder enger auf die eigentliche ID-Zeile begrenzt.
+
+
+## Version 7.14
+- Grundlegender Scanner-Fix für iPhone/Safari: Der sichtbare weiße Scanrahmen wird nun pixelgenau auf den tatsächlich ausgewerteten Bereich des Kamera-Rohbilds abgebildet.
+- Das durch `object-fit: cover` entstehende Zuschneiden des Kamerabilds wird bei der OCR-Koordinatenberechnung berücksichtigt.
+- Dadurch verarbeitet die OCR jetzt wirklich genau den Bereich, den der Nutzer im Rahmen sieht.
+- Der Scanbereich ist etwas höher und breiter, ohne umliegende Bildbereiche unnötig einzubeziehen.
+- Für denselben exakten Bildausschnitt werden mehrere OCR-Varianten verwendet (Graustufen + zwei Schwellenwerte).
+- Eine ID gilt erst als sicher, wenn sie innerhalb desselben Bildes mehrfach identisch erkannt wird und zusätzlich in einem weiteren Kameraframe bestätigt wurde.
+- Getrennte Ziffernfragmente werden weiterhin niemals zu einer ID zusammengesetzt.
+- Vor Übernahme bleibt die manuelle Bestätigung der erkannten Patienten-ID bestehen.
