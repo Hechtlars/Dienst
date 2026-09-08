@@ -497,23 +497,76 @@ dialog.action-sheet-open button {
 .patient-photo-entry-row{display:flex;align-items:center;gap:8px}.patient-photo-entry-row .patient-scan-button{width:auto;min-width:0;padding:9px 12px;gap:7px}.patient-photo-entry-row .patient-scan-button span{font-size:14px;font-weight:600}.entry-photo-link{margin-top:6px;border:0;background:transparent;padding:3px 0;color:var(--accent,#0a84ff);font:inherit;font-size:13px;text-align:left}
 
 
-/* Version 7.29 – Zuschneider auf iPhone explizit verschiebbar */
+
+
+
+/* Version 7.30 – kompaktere Zuschneideansicht mit größeren Touch-Flächen */
+#patientPhotoCrop .pp-crop-shell{
+  justify-content:flex-start;
+  gap:10px;
+}
+
 #patientPhotoCrop .pp-stage{
-  flex:1;
-  min-height:380px;
-  max-height:68dvh;
+  flex:none;
+  width:100%;
+  height:clamp(280px, 48dvh, 460px);
+  min-height:0;
+  max-height:none;
+  margin:2px 0 4px;
+  border-radius:16px;
   touch-action:none;
   overscroll-behavior:contain;
 }
+
+#patientPhotoCrop #ppImage{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+
 #patientPhotoCrop .pp-box{
   touch-action:none;
   cursor:move;
   z-index:5;
+  border-width:2px;
 }
+
+/* Große unsichtbare Touch-Zonen, kleiner sichtbarer Punkt */
 #patientPhotoCrop .pp-box i{
+  width:48px;
+  height:48px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
   touch-action:none;
   z-index:6;
 }
+
+#patientPhotoCrop .pp-box i::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:18px;
+  height:18px;
+  transform:translate(-50%,-50%);
+  border:3px solid #fff;
+  border-radius:50%;
+  background:#111;
+  box-shadow:0 1px 5px rgba(0,0,0,.45);
+}
+
+#patientPhotoCrop .pp-box i[data-h=tl]{left:-25px;top:-25px}
+#patientPhotoCrop .pp-box i[data-h=tr]{right:-25px;top:-25px}
+#patientPhotoCrop .pp-box i[data-h=bl]{left:-25px;bottom:-25px}
+#patientPhotoCrop .pp-box i[data-h=br]{right:-25px;bottom:-25px}
+
+#patientPhotoCrop .pp-help{
+  font-size:12px;
+  line-height:1.35;
+}
+
 #patientPhotoCrop .pp-crop-hint{
-  margin-bottom:0;
+  margin:0;
+  padding-bottom:2px;
 }

@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.29';
+const APP_VERSION = '7.30';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -1290,7 +1290,7 @@ function patientPhotoCropUi() {
         <button type="button" id="ppCropSave">Übernehmen</button>
       </div>
       <p class="pp-help">
-        Den weißen Rahmen mit dem Finger verschieben. An den vier Kreisen kannst du ihn größer oder kleiner ziehen.
+        Den weißen Rahmen direkt mit dem Finger verschieben. Die vier Eckpunkte haben extra große Touch-Flächen, damit sie sich leichter greifen lassen.
       </p>
       <div id="ppStage" class="pp-stage">
         <img id="ppImage" alt="">
@@ -1299,7 +1299,7 @@ function patientPhotoCropUi() {
         </div>
       </div>
       <p class="pp-help pp-crop-hint">
-        Der Rahmen kann auch ganz nach unten verschoben werden. Gespeichert wird nur der Inhalt innerhalb des Rahmens.
+        Nur der Bereich innerhalb des weißen Rahmens wird gespeichert. Das Foto selbst bleibt unverändert und wird danach verworfen.
       </p>
     </div>`;
 
@@ -1418,7 +1418,7 @@ function patientPhotoCropUi() {
 
 function openPatientPhotoCrop() {
   const d=patientPhotoCropUi(), img=d.querySelector('#ppImage');
-  patientPhotoCrop={x:.08,y:.36,w:.84,h:.28};
+  patientPhotoCrop={x:.14,y:.40,w:.72,h:.20};
   img.src=patientPhotoTempImage;
   img.onload=()=>d._render();
   d.showModal();

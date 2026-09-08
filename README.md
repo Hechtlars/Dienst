@@ -270,3 +270,11 @@ Es gibt keine OCR, keine Ziffernerkennung, kein Tesseract, kein PaddleOCR und ke
 - Größenänderung über alle vier Eckpunkte.
 - Pointer-Capture plus Touch-Fallback für Safari/iPhone.
 - Während des Verschiebens scrollt nicht versehentlich die Seite.
+
+
+## Version 7.30
+- Zuschneideansicht deutlich kompakter: Das Foto nimmt nicht mehr fast den ganzen Bildschirm ein.
+- Auswahlrahmen startet kleiner und eher im Format einer Zahlenzeile.
+- Die vier sichtbaren Eckpunkte bleiben klein, haben aber deutlich größere unsichtbare Touch-Flächen.
+- Rahmen weiterhin frei verschiebbar; Größenänderung weiterhin über alle vier Ecken.
+- Keine OCR oder Ziffernerkennung.
