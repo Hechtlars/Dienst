@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.10';
+const APP_VERSION = '7.11';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -964,7 +964,7 @@ async function openPatientIdScanner() {
 
     await patientOcrWorker.setParameters({
       tessedit_char_whitelist: '0123456789',
-      tessedit_pageseg_mode: '7',
+      tessedit_pageseg_mode: '13',
       preserve_interword_spaces: '0'
     });
 
@@ -1029,17 +1029,50 @@ async function scanPatientFrame(manual) {
     }
     ctx.putImageData(image, 0, 0);
 
-    const result = await patientOcrWorker.recognize(canvas);
-    const raw = String(result?.data?.text || '');
-    const digitsOnly = raw.replace(/\D/g, '');
-    const candidates = raw.match(/\d[\d\s.-]{7,}\d/g) || [];
-    const normalized = candidates
-      .map(value => value.replace(/\D/g, ''))
-      .filter(value => value.length >= 9 && value.length <= 30)
-      .sort((x, y) => y.length - x.length);
+    let result = await patientOcrWorker.recognize(canvas);
+    let raw = String(result?.data?.text || '');
 
-    let id = normalized[0] || '';
-    if (!id && digitsOnly.length >= 9 && digitsOnly.length <= 30) id = digitsOnly;
+    const extractPatientId = (text) => {
+      const digitsOnly = String(text || '').replace(/\D/g, '');
+      const candidates = String(text || '').match(/\d[\d\s.-]{7,}\d/g) || [];
+      const normalized = candidates
+        .map(value => value.replace(/\D/g, ''))
+        .filter(value => value.length >= 9 && value.length <= 30)
+        .sort((x, y) => y.length - x.length);
+      if (normalized[0]) return normalized[0];
+      if (digitsOnly.length >= 9 && digitsOnly.length <= 30) return digitsOnly;
+      return '';
+    };
+
+    let id = extractPatientId(raw);
+
+    // Zweiter Versuch für Monitorbilder: binarisieren + "single word".
+    // Das ist besonders robust bei großen, isolierten Ziffernfolgen.
+    if (!id) {
+      const image2 = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data2 = image2.data;
+      for (let i = 0; i < data2.length; i += 4) {
+        const gray = 0.299 * data2[i] + 0.587 * data2[i + 1] + 0.114 * data2[i + 2];
+        const value = gray > 145 ? 255 : 0;
+        data2[i] = data2[i + 1] = data2[i + 2] = value;
+      }
+      ctx.putImageData(image2, 0, 0);
+      await patientOcrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: '8',
+        preserve_interword_spaces: '0'
+      });
+      result = await patientOcrWorker.recognize(canvas);
+      raw = String(result?.data?.text || '');
+      id = extractPatientId(raw);
+
+      // Für den nächsten Scan wieder auf den primären Modus zurückstellen.
+      await patientOcrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: '13',
+        preserve_interword_spaces: '0'
+      });
+    }
 
     if (id) {
       const target = patientScanTarget;

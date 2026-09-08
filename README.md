@@ -111,3 +111,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Im •••-/Mehr-Menü wird ganz unten die aktuell geladene App-Version angezeigt.
 - Beispiel: „Dienst · Version 7.10“.
 - Damit lässt sich nach einem GitHub-Update direkt prüfen, ob das Gerät bereits die neue Version geladen hat.
+
+
+## Version 7.11
+- Patienten-ID-OCR gezielt anhand des gemeldeten Monitor-Beispiels verbessert.
+- Primäre Texterkennung von Tesseract PSM 7 auf PSM 13 umgestellt.
+- Falls die erste Erkennung keine ID liefert, erfolgt automatisch ein zweiter Versuch mit Schwarz-Weiß-Aufbereitung und PSM 8.
+- Nur Zahlenfolgen ab 9 Ziffern werden übernommen.
