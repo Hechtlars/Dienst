@@ -179,3 +179,12 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Mehrere Kandidaten werden nach Trefferzahl und Paddle-Konfidenz bewertet; unsichere Ergebnisse werden nicht automatisch übernommen.
 - Vor der Übernahme bleibt die sichtbare Bestätigung der erkannten Patienten-ID erhalten.
 - Beim ersten Scan müssen OCR-Bibliothek und Modelle aus dem Internet geladen werden; die eigentliche Bildauswertung erfolgt danach lokal im Browser.
+
+## Version 7.18
+- PaddleOCR wird nur einmal pro App-Sitzung geladen und danach wiederverwendet.
+- Scanner-Schließen beendet die OCR-Engine nicht mehr.
+- OCR wird nach App-Start im Leerlauf vorgeladen.
+- Gleichzeitige Initialisierungen werden verhindert.
+- Ladeanzeige zeigt Bibliothek, Modell und Bereitschaft getrennt.
+- 30-Sekunden-Timeout für die Bibliothek und 90-Sekunden-Timeout für das Modell.
+- Bei einem Fehler wird die konkrete Ursache angezeigt statt dauerhaft „wird geladen“.

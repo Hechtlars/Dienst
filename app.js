@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.17';
+const APP_VERSION = '7.18';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -861,6 +861,63 @@ function openEditEntry(dutyId, entryId) {
 
 let patientScannerStream = null;
 let patientOcrWorker = null; // PaddleOCR engine
+let patientOcrLoadPromise = null;
+let patientOcrLoadState = 'idle';
+
+function patientOcrTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`${label}: Zeitüberschreitung`)), ms
+    ))
+  ]);
+}
+
+async function ensurePatientOcr(status) {
+  if (patientOcrWorker) {
+    if (status) status.textContent = 'Ziffernerkennung bereit.';
+    return patientOcrWorker;
+  }
+  if (patientOcrLoadPromise) {
+    if (status) status.textContent = 'Ziffernerkennung wird bereits vorbereitet …';
+    return patientOcrLoadPromise;
+  }
+
+  patientOcrLoadState = 'loading';
+  patientOcrLoadPromise = (async () => {
+    try {
+      if (status) status.textContent = '1/3 · OCR-Bibliothek wird geladen …';
+      const mod = await patientOcrTimeout(
+        import('https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm'),
+        30000, 'OCR-Bibliothek'
+      );
+      if (!mod.PaddleOCR) throw new Error('PaddleOCR-Bibliothek unvollständig');
+
+      if (status) status.textContent = '2/3 · OCR-Modell wird geladen …';
+      const engine = await patientOcrTimeout(mod.PaddleOCR.create({
+        lang:'en', ocrVersion:'PP-OCRv5',
+        textDetectionBatchSize:1, textRecognitionBatchSize:4, worker:false,
+        ortOptions:{
+          backend:'wasm',
+          wasmPaths:'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
+          numThreads:1, simd:true
+        }
+      }), 90000, 'OCR-Modell');
+
+      patientOcrWorker = engine;
+      patientOcrLoadState = 'ready';
+      if (status) status.textContent = '3/3 · Ziffernerkennung bereit.';
+      return engine;
+    } catch (e) {
+      patientOcrLoadState = 'error';
+      patientOcrWorker = null;
+      throw e;
+    } finally {
+      patientOcrLoadPromise = null;
+    }
+  })();
+  return patientOcrLoadPromise;
+}
 let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
@@ -975,28 +1032,8 @@ async function openPatientIdScanner() {
     const status = document.getElementById('scannerStatus');
     if (status) status.textContent = 'OCR wird vorbereitet …';
 
-    // Version 7.17: PaddleOCR statt Tesseract.
-    // Bibliothek und Modelle werden geladen, die Bildauswertung selbst läuft lokal
-    // im Browser. Es wird kein Kamerabild an einen OCR-Dienst hochgeladen.
-    if (status) status.textContent = 'Neue Ziffernerkennung wird geladen …';
-
-    const paddleModule = await import('https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm');
-    const PaddleOCR = paddleModule.PaddleOCR;
-    if (!PaddleOCR) throw new Error('PaddleOCR konnte nicht geladen werden');
-
-    patientOcrWorker = await PaddleOCR.create({
-      lang: 'en',
-      ocrVersion: 'PP-OCRv5',
-      textDetectionBatchSize: 1,
-      textRecognitionBatchSize: 4,
-      worker: false,
-      ortOptions: {
-        backend: 'wasm',
-        wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
-        numThreads: 1,
-        simd: true
-      }
-    });
+    // OCR nur einmal pro App-Sitzung laden und anschließend wiederverwenden.
+    await ensurePatientOcr(status);
 
     if (status) status.textContent = 'Bereit – ID vollständig in den Rahmen und dann „Foto erfassen“ tippen.';
   } catch (error) {
@@ -1011,7 +1048,19 @@ async function openPatientIdScanner() {
 
 
 async function capturePatientIdStill() {
-  if (patientScanBusy || !patientOcrWorker) return;
+  if (patientScanBusy) return;
+  if (!patientOcrWorker) {
+    const status = document.getElementById('scannerStatus');
+    try {
+      await ensurePatientOcr(status);
+    } catch (error) {
+      if (status) {
+        status.textContent = `OCR nicht bereit: ${String(error?.message || 'Ladefehler')}. Scanner schließen und erneut versuchen.`;
+        status.classList.add('scanner-error');
+      }
+      return;
+    }
+  }
 
   const video = document.getElementById('patientScannerVideo');
   const canvas = document.getElementById('patientScannerCanvas');
@@ -1275,14 +1324,8 @@ async function closePatientScanner(restoreRecognizedId = false) {
     patientScannerStream.getTracks().forEach(track => track.stop());
     patientScannerStream = null;
   }
-  if (patientOcrWorker) {
-    const engine = patientOcrWorker;
-    patientOcrWorker = null;
-    try {
-      if (typeof engine.dispose === 'function') await engine.dispose();
-      else if (typeof engine.terminate === 'function') await engine.terminate();
-    } catch (_) {}
-  }
+  // OCR-Engine bleibt für weitere Scans dieser App-Sitzung geladen.
+
   patientScanBusy = false;
   const overlay = document.getElementById('patientScannerOverlay');
   if (overlay) {
@@ -1590,6 +1633,14 @@ window.addEventListener('focus', () => refreshTimeSensitiveView(true));
 // Ein laufender Prozess muss nicht neu gestartet werden, wenn eine Dienstgrenze
 // (07:15 / 08:30) überschritten wird. Ein kurzer, lokaler Check genügt.
 setInterval(() => refreshTimeSensitiveView(false), 30000);
+
+
+// PaddleOCR nach App-Start im Leerlauf vorladen. Die App selbst wird dadurch nicht blockiert.
+window.addEventListener('load', () => {
+  const start = () => ensurePatientOcr(null).catch(e => console.debug('OCR-Vorladen:', e));
+  if ('requestIdleCallback' in window) requestIdleCallback(start, {timeout:5000});
+  else setTimeout(start, 2500);
+}, {once:true});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
