@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.23';
+const APP_VERSION = '7.25';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -767,12 +767,18 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-id-row">
         <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern">
-        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
           <circle cx="12" cy="13" r="3.6"/>
         </svg></button>
         <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
       </div>
+        <input type="hidden" id="entryPatientIdPhoto">
+        <div id="entryPatientIdPhotoPreviewWrap" class="patient-id-photo-preview-wrap" hidden>
+          <div class="patient-id-photo-preview-label">Foto der Patienten-ID</div>
+          <img id="entryPatientIdPhotoPreview" class="patient-id-photo-preview" alt="Foto der Patienten-ID">
+          <button type="button" id="removePatientIdPhoto" class="secondary-button patient-id-photo-remove">Foto entfernen</button>
+        </div>
     </label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP"></textarea></label>
     <div id="modalError" class="error"></div>
@@ -823,7 +829,7 @@ function openEditEntry(dutyId, entryId) {
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-id-row">
         <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern" value="${escapeHtml(entry.patientId || '')}">
-        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M8.3 6.5 9.5 4.8h5L15.7 6.5H18a3 3 0 0 1 3 3v7.2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.3Z"/>
           <circle cx="12" cy="13" r="3.6"/>
         </svg></button>
@@ -860,7 +866,6 @@ function openEditEntry(dutyId, entryId) {
 
 
 let patientScannerStream = null;
-let patientOcrWorker = null;
 let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
@@ -886,7 +891,7 @@ function bindPatientIdTools() {
 }
 
 function showPatientScanInfo() {
-  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs wird kein Foto gespeichert. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
+  alert('Patienten-ID fotografieren\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs findet keine Texterkennung statt. Gespeichert wird nur der Bildausschnitt innerhalb des weißen Rahmens – lokal auf diesem Gerät. Es erfolgt kein Upload und keine Cloud-Synchronisierung.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
 }
 
 async function openPatientIdScanner() {
@@ -906,12 +911,12 @@ async function openPatientIdScanner() {
   const overlay = document.createElement('dialog');
   overlay.id = 'patientScannerOverlay';
   overlay.className = 'patient-scanner-overlay';
-  overlay.setAttribute('aria-label', 'Patienten-ID scannen');
+  overlay.setAttribute('aria-label', 'Patienten-ID fotografieren');
   overlay.innerHTML = `<div class="patient-scanner-panel">
     <div class="scanner-topbar">
       <button type="button" class="scanner-close" id="cancelPatientScan" aria-label="Scanner schließen">×</button>
       <div>
-        <div class="scanner-title">Patienten-ID scannen</div>
+        <div class="scanner-title">Patienten-ID fotografieren</div>
         <div class="scanner-subtitle">Etwas Abstand halten · kurz fokussieren lassen</div>
       </div>
       <span class="scanner-spacer" aria-hidden="true"></span>
@@ -921,18 +926,16 @@ async function openPatientIdScanner() {
       <div class="scanner-shade scanner-shade-top"></div>
       <div class="scanner-shade scanner-shade-bottom"></div>
       <div class="scanner-guide" aria-hidden="true">
-        <span>ID vollständig im Rahmen · dann Foto erfassen</span>
+        <span>ID vollständig im Rahmen · dann Foto aufnehmen</span>
       </div>
     </div>
     <canvas id="patientScannerCanvas" hidden></canvas>
-          <div id="patientOcrPreviewWrap" class="patient-ocr-preview-wrap" hidden>
-            <div class="patient-ocr-preview-title">Dieser Zahlenbereich wird zuerst ausgewertet</div>
-            <img id="patientOcrPreview" class="patient-ocr-preview" alt="OCR-Ausschnitt">
-            <div class="patient-ocr-preview-hint">Die App schneidet störende Symbole links und rechts bewusst ab und untersucht zuerst nur diesen Bereich.</div>
+          <div class="patient-photo-note">
+            Nach dem Foto legst du den Ausschnitt selbst fest. Keine Texterkennung, kein Upload, keine Cloud.
           </div>
     <div id="scannerStatus" class="scanner-status">Kamera wird gestartet …</div>
     <div class="scanner-actions">
-      <button type="button" class="primary" id="capturePatientId">Foto erfassen</button>
+      <button type="button" class="primary" id="capturePatientId">Foto aufnehmen</button>
       <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>
     </div>
     <div class="scanner-privacy">Das Foto wird nur kurzfristig im Arbeitsspeicher zur Erkennung verwendet und anschließend verworfen. Es wird nicht gespeichert. Übernommen wird ausschließlich die erkannte Patienten-ID.</div>
@@ -1003,7 +1006,7 @@ async function openPatientIdScanner() {
       preserve_interword_spaces: '0'
     });
 
-    if (status) status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
+    if (status) status.textContent = 'Bereit – etwas Abstand halten und dann „Foto aufnehmen“ tippen.';
   } catch (error) {
     console.warn('Patienten-ID Scanner:', error);
     const status = document.getElementById('scannerStatus');
@@ -1029,255 +1032,209 @@ function showPatientOcrPreviewFromCanvas(canvas) {
 }
 
 
-function patientOcrRecognizeWithTimeout(worker, image, timeoutMs = 12000) {
-  return Promise.race([
-    worker.recognize(image),
-    new Promise((_, reject) => {
-      window.setTimeout(() => reject(new Error('OCR-Zeitüberschreitung')), timeoutMs);
-    })
-  ]);
+
+
+
+let patientCropSourceData = '';
+let patientCropRect = { x: 0.12, y: 0.35, w: 0.76, h: 0.30 };
+let patientCropDrag = null;
+
+function ensurePatientCropDialog() {
+  let dialog = document.getElementById('patientCropDialog');
+  if (dialog) return dialog;
+
+  dialog = document.createElement('dialog');
+  dialog.id = 'patientCropDialog';
+  dialog.className = 'patient-crop-dialog';
+  dialog.innerHTML = `
+    <div class="patient-crop-sheet">
+      <div class="patient-crop-header">
+        <button type="button" id="patientCropCancel" class="patient-crop-text-button">Abbrechen</button>
+        <strong>Ausschnitt festlegen</strong>
+        <button type="button" id="patientCropUse" class="patient-crop-text-button patient-crop-use">Übernehmen</button>
+      </div>
+      <div class="patient-crop-help">Rahmen verschieben und an den Ecken verändern, bis alle Ziffern vollständig enthalten sind.</div>
+      <div id="patientCropStage" class="patient-crop-stage">
+        <img id="patientCropImage" class="patient-crop-image" alt="Aufgenommenes Foto">
+        <div id="patientCropBox" class="patient-crop-box">
+          <span class="patient-crop-handle tl" data-handle="tl"></span>
+          <span class="patient-crop-handle tr" data-handle="tr"></span>
+          <span class="patient-crop-handle bl" data-handle="bl"></span>
+          <span class="patient-crop-handle br" data-handle="br"></span>
+        </div>
+      </div>
+      <div class="patient-crop-privacy">Gespeichert wird nur der von dir gewählte Ausschnitt – verkleinert und komprimiert. Das vollständige Foto wird verworfen.</div>
+    </div>`;
+  document.body.appendChild(dialog);
+
+  const stage = dialog.querySelector('#patientCropStage');
+  const box = dialog.querySelector('#patientCropBox');
+
+  const render = () => {
+    box.style.left = `${patientCropRect.x * 100}%`;
+    box.style.top = `${patientCropRect.y * 100}%`;
+    box.style.width = `${patientCropRect.w * 100}%`;
+    box.style.height = `${patientCropRect.h * 100}%`;
+  };
+
+  const point = (event) => {
+    const r = stage.getBoundingClientRect();
+    const p = event.touches?.[0] || event;
+    return {
+      x: Math.max(0, Math.min(1, (p.clientX - r.left) / r.width)),
+      y: Math.max(0, Math.min(1, (p.clientY - r.top) / r.height))
+    };
+  };
+
+  const begin = (event) => {
+    const p = point(event);
+    patientCropDrag = {
+      handle: event.target?.dataset?.handle || 'move',
+      startX: p.x, startY: p.y,
+      rect: { ...patientCropRect }
+    };
+    if (event.cancelable) event.preventDefault();
+  };
+
+  const move = (event) => {
+    if (!patientCropDrag) return;
+    const p = point(event);
+    const dx = p.x - patientCropDrag.startX;
+    const dy = p.y - patientCropDrag.startY;
+    const r = { ...patientCropDrag.rect };
+    const minW = 0.18, minH = 0.10;
+
+    if (patientCropDrag.handle === 'move') {
+      patientCropRect.x = Math.max(0, Math.min(1 - r.w, r.x + dx));
+      patientCropRect.y = Math.max(0, Math.min(1 - r.h, r.y + dy));
+    } else {
+      let left = r.x, top = r.y, right = r.x + r.w, bottom = r.y + r.h;
+      if (patientCropDrag.handle.includes('l')) left = Math.max(0, Math.min(right - minW, r.x + dx));
+      if (patientCropDrag.handle.includes('r')) right = Math.min(1, Math.max(left + minW, r.x + r.w + dx));
+      if (patientCropDrag.handle.includes('t')) top = Math.max(0, Math.min(bottom - minH, r.y + dy));
+      if (patientCropDrag.handle.includes('b')) bottom = Math.min(1, Math.max(top + minH, r.y + r.h + dy));
+      patientCropRect = { x:left, y:top, w:right-left, h:bottom-top };
+    }
+    render();
+    if (event.cancelable) event.preventDefault();
+  };
+
+  const finish = () => { patientCropDrag = null; };
+
+  box.addEventListener('pointerdown', begin);
+  box.addEventListener('touchstart', begin, { passive:false });
+  window.addEventListener('pointermove', move, { passive:false });
+  window.addEventListener('touchmove', move, { passive:false });
+  window.addEventListener('pointerup', finish);
+  window.addEventListener('touchend', finish);
+
+  dialog.querySelector('#patientCropCancel').addEventListener('click', () => {
+    patientCropSourceData = '';
+    dialog.close();
+  });
+
+  dialog.querySelector('#patientCropUse').addEventListener('click', async () => {
+    await saveManualPatientCrop();
+  });
+
+  dialog._renderCrop = render;
+  return dialog;
+}
+
+async function openPatientCropEditor(dataUrl) {
+  patientCropSourceData = dataUrl;
+  patientCropRect = { x: 0.10, y: 0.32, w: 0.80, h: 0.34 };
+  const dialog = ensurePatientCropDialog();
+  const img = dialog.querySelector('#patientCropImage');
+  img.src = dataUrl;
+  await new Promise(resolve => {
+    if (img.complete) resolve();
+    else img.onload = resolve;
+  });
+  dialog._renderCrop();
+  dialog.showModal();
+}
+
+async function saveManualPatientCrop() {
+  if (!patientCropSourceData) return;
+  const dialog = ensurePatientCropDialog();
+  const img = dialog.querySelector('#patientCropImage');
+  const out = document.createElement('canvas');
+
+  const sx = Math.round(img.naturalWidth * patientCropRect.x);
+  const sy = Math.round(img.naturalHeight * patientCropRect.y);
+  const sw = Math.max(1, Math.round(img.naturalWidth * patientCropRect.w));
+  const sh = Math.max(1, Math.round(img.naturalHeight * patientCropRect.h));
+
+  // Kleine lokale Datei: maximal 700 px breit, niemals hochskalieren.
+  const scale = Math.min(1, 700 / sw);
+  out.width = Math.max(1, Math.round(sw * scale));
+  out.height = Math.max(1, Math.round(sh * scale));
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+
+  // JPEG 0.68 reicht für gut lesbare Ziffern und hält localStorage klein.
+  const croppedData = out.toDataURL('image/jpeg', 0.68);
+
+  const input = document.getElementById('entryPatientIdPhoto');
+  const preview = document.getElementById('entryPatientIdPhotoPreview');
+  const previewWrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+  if (input) input.value = croppedData;
+  if (preview) preview.src = croppedData;
+  if (previewWrap) previewWrap.hidden = false;
+
+  patientCropSourceData = '';
+  dialog.close();
 }
 
 async function capturePatientIdStill() {
-  if (patientScanBusy || !patientOcrWorker) return;
+  if (patientScanBusy) return;
 
   const video = document.getElementById('patientScannerVideo');
   const canvas = document.getElementById('patientScannerCanvas');
-  const guide = document.querySelector('#patientScannerOverlay .scanner-guide');
+  const button = document.getElementById('patientCaptureButton') ||
+                 document.getElementById('capturePatientIdButton') ||
+                 document.getElementById('patientScannerCapture');
   const status = document.getElementById('scannerStatus');
-  const button = document.getElementById('capturePatientId');
 
-  if (!video || !canvas || !guide || !video.videoWidth || !video.videoHeight) {
-    if (status) status.textContent = 'Kamerabild noch nicht bereit. Bitte kurz warten.';
+  if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+    if (status) status.textContent = 'Kamera noch nicht bereit. Bitte kurz warten.';
     return;
   }
 
   patientScanBusy = true;
-  if (button) button.disabled = true;
-  if (status) status.textContent = 'Hochauflösendes Bild wird erfasst …';
-
-  let bitmap = null;
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Foto wird vorbereitet …';
+  }
 
   try {
-    const track = patientScannerStream?.getVideoTracks?.()[0];
-    let sourceWidth = video.videoWidth;
-    let sourceHeight = video.videoHeight;
-    let drawSource = video;
+    // Zunächst das vollständige sichtbare Kamerabild aufnehmen.
+    // Der Nutzer legt DANACH selbst fest, welcher Ausschnitt gespeichert wird.
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const maxPreviewWidth = 1600;
+    const scale = Math.min(1, maxPreviewWidth / vw);
+    canvas.width = Math.max(1, Math.round(vw * scale));
+    canvas.height = Math.max(1, Math.round(vh * scale));
 
-    if (track && 'ImageCapture' in window) {
-      try {
-        const imageCapture = new ImageCapture(track);
-        const blob = await imageCapture.takePhoto();
-        bitmap = await createImageBitmap(blob);
-        sourceWidth = bitmap.width;
-        sourceHeight = bitmap.height;
-        drawSource = bitmap;
-      } catch (error) {
-        console.debug('ImageCapture nicht verfügbar, Videoframe wird verwendet:', error);
-      }
-    }
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, vw, vh, 0, 0, canvas.width, canvas.height);
+    const fullPhoto = canvas.toDataURL('image/jpeg', 0.82);
 
-    if (status) status.textContent = 'Patienten-ID wird lokal erkannt …';
-
-    const videoRect = video.getBoundingClientRect();
-    const guideRect = guide.getBoundingClientRect();
-
-    const displayW = videoRect.width;
-    const displayH = videoRect.height;
-    const coverScale = Math.max(displayW / sourceWidth, displayH / sourceHeight);
-    const renderedW = sourceWidth * coverScale;
-    const renderedH = sourceHeight * coverScale;
-    const cropOffsetX = (renderedW - displayW) / 2;
-    const cropOffsetY = (renderedH - displayH) / 2;
-
-    const guideLeft = guideRect.left - videoRect.left;
-    const guideTop = guideRect.top - videoRect.top;
-
-    let baseSx = (guideLeft + cropOffsetX) / coverScale;
-    let baseSy = (guideTop + cropOffsetY) / coverScale;
-    let baseW = guideRect.width / coverScale;
-    let baseH = guideRect.height / coverScale;
-
-    const padX = baseW * 0.06;
-    const padY = baseH * 0.12;
-    baseSx -= padX;
-    baseSy -= padY;
-    baseW += padX * 2;
-    baseH += padY * 2;
-
-    baseSx = Math.max(0, baseSx);
-    baseSy = Math.max(0, baseSy);
-    baseW = Math.min(sourceWidth - baseSx, baseW);
-    baseH = Math.min(sourceHeight - baseSy, baseH);
-
-    // Version 7.20:
-    // Die sichtbare ID steht in der Mitte der Bildschirmzeile. Symbole links/rechts
-    // haben Tesseract bisher irritiert. Deshalb werden zuerst mehrere ENGE,
-    // mittig liegende Zahlenfenster untersucht. Erst danach folgt ein breiter Fallback.
-    const regions = [
-      { name: 'digits-tight',  dx: 0.00,  dy: 0.00, scaleX: 0.42, scaleY: 0.56 },
-      { name: 'digits-medium', dx: 0.00,  dy: 0.00, scaleX: 0.50, scaleY: 0.62 },
-      { name: 'digits-left',   dx:-0.025, dy: 0.00, scaleX: 0.50, scaleY: 0.62 }
-    ];
-
-    const extractPatientId = (text) => {
-      // Nicht verschiedene OCR-Fragmente zusammenkleben.
-      // Erlaubt sind nur zusammenhängende Zahlenfolgen von 9–30 Stellen.
-      const matches = [...String(text || '').matchAll(/(^|[^\d])(\d{9,30})(?=$|[^\d])/g)]
-        .map(m => m[2])
-        .filter(Boolean);
-      const unique = [...new Set(matches)];
-      return unique.length === 1 ? unique[0] : '';
-    };
-
-    const observations = [];
-
-    const runPass = async (imageData, psm, regionName, variant) => {
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.putImageData(imageData, 0, 0);
-
-      await patientOcrWorker.setParameters({
-        tessedit_char_whitelist: '0123456789',
-        tessedit_pageseg_mode: String(psm),
-        preserve_interword_spaces: '0',
-        classify_bln_numeric_mode: '1',
-        user_defined_dpi: '300'
-      });
-
-      const result = await patientOcrRecognizeWithTimeout(patientOcrWorker, canvas, 12000);
-      const raw = String(result?.data?.text || '').trim();
-      const id = extractPatientId(raw);
-      const confidence = Number(result?.data?.confidence || 0);
-
-      if (id) {
-        observations.push({ id, confidence, regionName, variant, psm });
-      }
-    };
-
-    for (const region of regions) {
-      let cropW = baseW * region.scaleX;
-      let cropH = baseH * region.scaleY;
-      let sx = baseSx + (baseW - cropW) / 2 + baseW * region.dx;
-      let sy = baseSy + (baseH - cropH) / 2 + baseH * region.dy;
-
-      sx = Math.max(0, Math.min(sourceWidth - 1, sx));
-      sy = Math.max(0, Math.min(sourceHeight - 1, sy));
-      cropW = Math.max(1, Math.min(sourceWidth - sx, cropW));
-      cropH = Math.max(1, Math.min(sourceHeight - sy, cropH));
-
-      // Weniger extremes Hochskalieren als zuvor, damit Monitor-Pixel/Moiré
-      // nicht zusätzlich vergrößert werden.
-      const targetWidth = Math.min(2600, Math.max(1600, Math.round(cropW * 2.6)));
-      const scale = targetWidth / cropW;
-      canvas.width = targetWidth;
-      canvas.height = Math.max(260, Math.round(cropH * scale));
-
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(drawSource, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
-
-      // Die Vorschau zeigt das erste, engste Zahlenfenster – also genau den Bereich,
-      // der zuerst an Tesseract geht.
-      if (region === regions[0]) {
-        showPatientOcrPreviewFromCanvas(canvas);
-      }
-
-      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // Variante 1: Graustufen mit moderatem Kontrast
-      const gray = new ImageData(
-        new Uint8ClampedArray(original.data),
-        original.width,
-        original.height
-      );
-      for (let i = 0; i < gray.data.length; i += 4) {
-        const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
-        const v = Math.max(0, Math.min(255, (g - 128) * 1.25 + 128));
-        gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
-      }
-      try {
-        await runPass(gray, 13, region.name, 'gray');
-      } catch (error) {
-        console.debug('OCR-Pass abgebrochen:', error);
-      }
-
-      // Variante 2: adaptiv etwas hellere Schwelle
-      const bw = new ImageData(
-        new Uint8ClampedArray(original.data),
-        original.width,
-        original.height
-      );
-      let sum = 0;
-      const pixelCount = bw.data.length / 4;
-      for (let i = 0; i < bw.data.length; i += 4) {
-        sum += 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
-      }
-      const mean = sum / Math.max(1, pixelCount);
-      const threshold = Math.max(125, Math.min(190, mean - 12));
-
-      for (let i = 0; i < bw.data.length; i += 4) {
-        const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
-        const v = g > threshold ? 255 : 0;
-        bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
-      }
-      try {
-        await runPass(bw, 8, region.name, 'bw');
-      } catch (error) {
-        console.debug('OCR-Pass abgebrochen:', error);
-      }
-
-      // Kandidaten nur übernehmen, wenn mehrere unabhängige Durchläufe dieselbe
-      // komplette ID liefern. Ein einzelner Treffer reicht bei Patienten-IDs nicht.
-      const grouped = observations.reduce((m, obs) => {
-        if (!m[obs.id]) m[obs.id] = { id: obs.id, hits: 0, bestConfidence: 0, regions: new Set() };
-        m[obs.id].hits += 1;
-        m[obs.id].bestConfidence = Math.max(m[obs.id].bestConfidence, obs.confidence);
-        m[obs.id].regions.add(obs.regionName);
-        return m;
-      }, {});
-
-      const ranked = Object.values(grouped)
-        .map(x => ({ ...x, regionCount: x.regions.size }))
-        .sort((x, y) =>
-          (y.hits * 3 + y.regionCount * 2 + y.bestConfidence / 100) -
-          (x.hits * 3 + x.regionCount * 2 + x.bestConfidence / 100)
-        );
-
-      const winner = ranked[0];
-      const runnerUp = ranked[1];
-
-      const safe =
-        winner &&
-        winner.hits >= 2 &&
-        (winner.regionCount >= 2 || winner.bestConfidence >= 75) &&
-        (!runnerUp || winner.hits > runnerUp.hits || winner.regionCount > runnerUp.regionCount);
-
-      if (safe) {
-        recognizedPatientIdPending = winner.id;
-        showPatientIdConfirmation(winner.id);
-        return;
-      }
-    }
-
-    if (status) {
-      status.textContent = 'Keine eindeutige ID erkannt. Du kannst sofort erneut erfassen oder den Scanner schließen.';
-    }
+    // Kamera schließen; vollständiges Foto existiert nur vorübergehend im Speicher.
+    await closePatientScanner();
+    await openPatientCropEditor(fullPhoto);
   } catch (error) {
-    console.warn('Foto-OCR fehlgeschlagen', error);
-    if (status) status.textContent = 'Erkennung fehlgeschlagen. Bitte erneut versuchen oder manuell eingeben.';
+    console.error(error);
+    if (status) status.textContent = 'Foto konnte nicht vorbereitet werden. Bitte erneut versuchen.';
   } finally {
-    if (bitmap) {
-      try { bitmap.close(); } catch (_) {}
-    }
-    if (canvas) {
-      canvas.width = 1;
-      canvas.height = 1;
-    }
     patientScanBusy = false;
     if (button) {
       button.disabled = false;
-      button.textContent = 'Foto erfassen';
+      button.textContent = 'Foto aufnehmen';
     }
   }
 }
@@ -1323,12 +1280,12 @@ function showPatientIdConfirmation(id) {
     patientScanCandidateHits = 0;
     recognizedPatientIdPending = '';
     confirmation.innerHTML = `
-      <button type="button" class="primary" id="capturePatientId">Foto erfassen</button>
+      <button type="button" class="primary" id="capturePatientId">Foto aufnehmen</button>
       <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>`;
     document.getElementById('capturePatientId').onclick = capturePatientIdStill;
     document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
     if (status) {
-      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
+      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto aufnehmen“ tippen.';
       status.classList.remove('scanner-success');
     }
   };
@@ -1695,4 +1652,51 @@ modal.addEventListener('close', () => {
   stopPatientScanner();
   modal.classList.remove('action-sheet-open');
   modal.classList.remove('duty-date-dialog');
+});
+
+
+document.addEventListener('click', (event) => {
+  if (event.target && event.target.id === 'removePatientIdPhoto') {
+    const input = document.getElementById('entryPatientIdPhoto');
+    const preview = document.getElementById('entryPatientIdPhotoPreview');
+    const wrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+    if (input) input.value = '';
+    if (preview) preview.removeAttribute('src');
+    if (wrap) wrap.hidden = true;
+  }
+});
+
+
+function patientIdPhotoHtml(entry) {
+  if (!entry?.patientIdPhoto) return '';
+  return `<div class="entry-patient-photo"><img src="${entry.patientIdPhoto}" alt="Foto der Patienten-ID"></div>`;
+}
+
+
+function ensurePatientPhotoViewer() {
+  let dialog = document.getElementById('patientPhotoViewer');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'patientPhotoViewer';
+  dialog.className = 'patient-photo-viewer';
+  dialog.innerHTML = `
+    <div class="patient-photo-viewer-sheet">
+      <div class="patient-photo-viewer-head">
+        <strong>Patienten-ID</strong>
+        <button type="button" class="patient-photo-viewer-close" aria-label="Schließen">×</button>
+      </div>
+      <img class="patient-photo-viewer-image" alt="Foto der Patienten-ID">
+    </div>`;
+  document.body.appendChild(dialog);
+  dialog.querySelector('.patient-photo-viewer-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+  return dialog;
+}
+
+document.addEventListener('click', event => {
+  const img = event.target.closest?.('.entry-patient-photo img, .patient-id-photo-preview');
+  if (!img?.src) return;
+  const dialog = ensurePatientPhotoViewer();
+  dialog.querySelector('.patient-photo-viewer-image').src = img.src;
+  dialog.showModal();
 });

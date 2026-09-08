@@ -212,3 +212,24 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - OCR-Vorschau kompakter.
 - Foto-Button wird nach erfolgloser Erkennung sofort wieder aktiviert.
 - Aktionsbereich bleibt möglichst am unteren Rand sichtbar.
+
+
+## Version 7.24
+- OCR/Texterkennung für die Patienten-ID vollständig entfernt.
+- Tesseract-Bibliothek entfernt.
+- Der Nutzer fotografiert nur den Bereich innerhalb des weißen Rahmens.
+- Genau dieser kleine Bildausschnitt wird lokal zusammen mit dem Einsatz gespeichert.
+- Keine Erkennung oder Interpretation der Ziffern durch die App.
+- Kein Upload, keine Cloud-Verarbeitung.
+- Der gespeicherte Bildausschnitt wird im Einsatzformular als Vorschau angezeigt und kann wieder entfernt werden.
+- Bestehende manuelle Patienten-ID-Felder bleiben aus Gründen der Rückwärtskompatibilität erhalten.
+
+
+## Version 7.25
+- Keine OCR/Texterkennung.
+- Nach dem Fotografieren öffnet sich eine manuelle Zuschneideansicht.
+- Der Nutzer bestimmt selbst durch Verschieben und Vergrößern/Verkleinern des Rahmens, welche Ziffern zum Patienten-ID-Foto gehören.
+- Erst „Übernehmen“ speichert den gewählten Ausschnitt.
+- Das vollständige Foto wird danach verworfen.
+- Der gespeicherte Ausschnitt wird auf maximal 700 px Breite verkleinert und als JPEG mit reduzierter Qualität gespeichert, um localStorage möglichst wenig zu belasten.
+- Gespeicherte ID-Fotos können angetippt und groß angezeigt werden.
