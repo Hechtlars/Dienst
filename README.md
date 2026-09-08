@@ -118,3 +118,10 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Primäre Texterkennung von Tesseract PSM 7 auf PSM 13 umgestellt.
 - Falls die erste Erkennung keine ID liefert, erfolgt automatisch ein zweiter Versuch mit Schwarz-Weiß-Aufbereitung und PSM 8.
 - Nur Zahlenfolgen ab 9 Ziffern werden übernommen.
+
+
+## Version 7.12
+- Erkannte Patienten-ID wird nach erfolgreichem Scan zuverlässig in das Patienten-ID-Feld übernommen.
+- Scanner schließt sich anschließend automatisch und kehrt zur Einsatzmaske zurück.
+- Zusätzliche input/change-Events sorgen insbesondere unter iOS/Safari dafür, dass die übernommene ID im Formular erhalten bleibt.
+- Scanrahmen und tatsächlich ausgewerteter Bildbereich wurden etwas vergrößert, damit die Ziffern nicht mehr ganz so exakt positioniert werden müssen.

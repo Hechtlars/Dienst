@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.11';
+const APP_VERSION = '7.12';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -864,6 +864,7 @@ let patientOcrWorker = null;
 let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
+let recognizedPatientIdPending = '';
 
 function bindPatientIdTools() {
   const input = document.getElementById('entryPatientId');
@@ -927,8 +928,8 @@ async function openPatientIdScanner() {
   // covers the already open "Einsatz erfassen/bearbeiten" dialog on iOS/Safari.
   overlay.showModal();
 
-  document.getElementById('cancelPatientScan').onclick = closePatientScanner;
-  document.getElementById('enterPatientIdManually').onclick = closePatientScanner;
+  document.getElementById('cancelPatientScan').onclick = () => closePatientScanner(false);
+  document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
   document.getElementById('capturePatientId').onclick = () => scanPatientFrame(true);
 
   try {
@@ -1005,8 +1006,8 @@ async function scanPatientFrame(manual) {
 
     // Der ausgewertete Bereich entspricht dem sichtbaren horizontalen Scanrahmen.
     // Breit, aber bewusst niedrig, damit umliegende Namen/Geburtsdaten nicht Teil der OCR sind.
-    const cropW = Math.round(vw * 0.90);
-    const cropH = Math.round(vh * 0.18);
+    const cropW = Math.round(vw * 0.94);
+    const cropH = Math.round(vh * 0.22);
     const sx = Math.round((vw - cropW) / 2);
     const sy = Math.round((vh - cropH) / 2);
 
@@ -1075,17 +1076,19 @@ async function scanPatientFrame(manual) {
     }
 
     if (id) {
-      const target = patientScanTarget;
+      recognizedPatientIdPending = id;
+      const target = patientScanTarget || document.getElementById('entryPatientId');
       if (target && document.body.contains(target)) {
         target.value = id;
         target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
       }
       if (status) {
         status.textContent = `Erkannt: ${id}`;
         status.classList.add('scanner-success');
       }
       haptic();
-      window.setTimeout(closePatientScanner, 450);
+      window.setTimeout(() => closePatientScanner(true), 450);
       return;
     }
 
@@ -1108,7 +1111,7 @@ async function scanPatientFrame(manual) {
   }
 }
 
-async function closePatientScanner() {
+async function closePatientScanner(restoreRecognizedId = false) {
   if (patientScanTimer) {
     window.clearInterval(patientScanTimer);
     patientScanTimer = null;
@@ -1128,7 +1131,24 @@ async function closePatientScanner() {
     try { if (overlay.open) overlay.close(); } catch (_) {}
     overlay.remove();
   }
+
+  if (restoreRecognizedId && recognizedPatientIdPending) {
+    const idToRestore = recognizedPatientIdPending;
+    // Wait one frame so iOS/Safari has fully returned focus to the underlying entry dialog.
+    requestAnimationFrame(() => {
+      const liveInput = document.getElementById('entryPatientId');
+      if (liveInput) {
+        liveInput.value = idToRestore;
+        liveInput.dispatchEvent(new Event('input', { bubbles: true }));
+        liveInput.dispatchEvent(new Event('change', { bubbles: true }));
+        liveInput.focus({ preventScroll: true });
+      }
+    });
+  }
+
   patientScanTarget = null;
+  if (!restoreRecognizedId) recognizedPatientIdPending = '';
+  else window.setTimeout(() => { recognizedPatientIdPending = ''; }, 800);
 }
 
 function stopPatientScanner() {

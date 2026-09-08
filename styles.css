@@ -442,3 +442,13 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
   color:var(--secondary);
   opacity:.72;
 }
+
+/* Version 7.12: etwas großzügigerer sichtbarer Scanbereich */
+.patient-scanner-overlay .scanner-guide{
+  left:3%;
+  right:3%;
+  top:39%;
+  height:22%;
+}
+.scanner-shade-top{height:39%}
+.scanner-shade-bottom{top:61%}
