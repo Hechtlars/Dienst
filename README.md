@@ -203,3 +203,12 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Engerer, sauberer zentrierter Zahlenbereich.
 - PSM 13 bleibt Hauptmodus; PSM 8 wird nur noch als begrenzter Fallback genutzt.
 - Der Scanner kann auch nach einem fehlgeschlagenen OCR-Versuch geschlossen werden.
+
+
+## Version 7.23
+- Scanner auf kleinen iPhones explizit vertikal scrollbar gemacht.
+- Der Dialog nutzt jetzt 100dvh und iOS-kompatibles Momentum-Scrolling.
+- Touch-Gesten im unteren Bereich werden nicht mehr blockiert.
+- OCR-Vorschau kompakter.
+- Foto-Button wird nach erfolgloser Erkennung sofort wieder aktiviert.
+- Aktionsbereich bleibt möglichst am unteren Rand sichtbar.
