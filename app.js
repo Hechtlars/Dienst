@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.3';
+const APP_VERSION = '7.6';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -762,12 +762,19 @@ function openNewEntry(dutyId) {
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
-    <label class="field"><span>Patienten-ID (optional)</span><input id="entryPatientId" type="text" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="z. B. 12345"></label>
+    <label class="field"><span>Patienten-ID (optional)</span>
+      <div class="patient-id-row">
+        <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern">
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen">⌗</button>
+        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
+      </div>
+    </label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP"></textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  bindPatientIdTools();
   for (const button of modalContent.querySelectorAll('[data-type]')) {
     button.onclick = () => {
       type = button.dataset.type;
@@ -782,7 +789,8 @@ function openNewEntry(dutyId) {
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError');
     error.textContent = '';
-    if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
+    if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
+    if (patientId && !/^\d{9,}$/.test(patientId)) { error.textContent = 'Wenn eine Patienten-ID angegeben wird, muss sie aus mindestens 9 Ziffern bestehen.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`);
     const endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
@@ -807,12 +815,19 @@ function openEditEntry(dutyId, entryId) {
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(start)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(start.getHours())}:${pad(start.getMinutes())}"></label>
     <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(end.getHours())}:${pad(end.getMinutes())}"></label>
-    <label class="field"><span>Patienten-ID (optional)</span><input id="entryPatientId" type="text" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="z. B. 12345" value="${escapeHtml(entry.patientId || '')}"></label>
+    <label class="field"><span>Patienten-ID (optional)</span>
+      <div class="patient-id-row">
+        <input id="entryPatientId" type="text" inputmode="numeric" pattern="[0-9]*" minlength="9" maxlength="30" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mind. 9 Ziffern" value="${escapeHtml(entry.patientId || '')}">
+        <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID scannen">⌗</button>
+        <button type="button" class="patient-info-button" id="patientScanInfo" aria-label="Information zum Scan">i</button>
+      </div>
+    </label>
     <label class="field"><span>Bemerkung (optional)</span><textarea id="entryNote" rows="3" maxlength="200" placeholder="z. B. OP">${escapeHtml(entry.note || '')}</textarea></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveEntry">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  bindPatientIdTools();
   for (const button of modalContent.querySelectorAll('[data-type]')) button.onclick = () => {
     type = button.dataset.type;
     for (const item of modalContent.querySelectorAll('[data-type]')) item.classList.toggle('selected', item === button);
@@ -824,7 +839,8 @@ function openEditEntry(dutyId, entryId) {
     const patientId = document.getElementById('entryPatientId').value.trim();
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError'); error.textContent = '';
-    if (!date || !startTime || !endTime) { error.textContent = 'Bitte alle Felder ausfüllen.'; return; }
+    if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
+    if (patientId && !/^\d{9,}$/.test(patientId)) { error.textContent = 'Wenn eine Patienten-ID angegeben wird, muss sie aus mindestens 9 Ziffern bestehen.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`), endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
@@ -832,6 +848,163 @@ function openEditEntry(dutyId, entryId) {
     Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), patientId, note });
     saveState(); haptic(); modal.close(); render();
   };
+}
+
+
+let patientScannerStream = null;
+
+function bindPatientIdTools() {
+  const input = document.getElementById('entryPatientId');
+  const scanButton = document.getElementById('scanPatientId');
+  const infoButton = document.getElementById('patientScanInfo');
+  if (input) {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '');
+    });
+  }
+  if (scanButton) scanButton.onclick = openPatientIdScanner;
+  if (infoButton) infoButton.onclick = showPatientScanInfo;
+}
+
+function showPatientScanInfo() {
+  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs wird kein Foto gespeichert. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
+}
+
+async function openPatientIdScanner() {
+  const targetInput = document.getElementById('entryPatientId');
+  if (!targetInput) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Die Kamera kann in diesem Browser nicht direkt geöffnet werden. Bitte die Patienten-ID manuell eingeben.');
+    return;
+  }
+  const previousContent = modalContent.innerHTML;
+  try {
+    patientScannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    modalContent.innerHTML = `<div class="modal-body scanner-body">
+      <div class="modal-title">Patienten-ID scannen</div>
+      <div class="scanner-note">Nur die Zahlenfolge der Patienten-ID in den Rahmen halten.</div>
+      <div class="scanner-video-wrap">
+        <video id="patientScannerVideo" playsinline autoplay muted></video>
+        <div class="scanner-guide" aria-hidden="true"></div>
+      </div>
+      <div id="scannerStatus" class="small-note">Kamera bereit. Das Bild wird nicht gespeichert.</div>
+      <canvas id="patientScannerCanvas" hidden></canvas>
+      <button type="button" class="primary" id="capturePatientId">ID erfassen</button>
+      <button type="button" class="secondary-button" id="cancelPatientScan">Abbrechen</button>
+    </div>`;
+    const video = document.getElementById('patientScannerVideo');
+    video.srcObject = patientScannerStream;
+    document.getElementById('cancelPatientScan').onclick = () => {
+      stopPatientScanner();
+      modalContent.innerHTML = previousContent;
+      bindPatientIdTools();
+      bindRestoredEntryFormHandlers();
+    };
+    document.getElementById('capturePatientId').onclick = async () => {
+      const captureButton = document.getElementById('capturePatientId');
+      const status = document.getElementById('scannerStatus');
+      captureButton.disabled = true;
+      status.textContent = 'Patienten-ID wird lokal erkannt …';
+      try {
+        const id = await recognizePatientId(video);
+        if (!id) {
+          status.textContent = 'Keine eindeutige ID mit mindestens 9 Ziffern erkannt. Bitte erneut versuchen.';
+          captureButton.disabled = false;
+          return;
+        }
+        stopPatientScanner();
+        modalContent.innerHTML = previousContent;
+        bindPatientIdTools();
+        bindRestoredEntryFormHandlers();
+        const restoredInput = document.getElementById('entryPatientId');
+        if (restoredInput) restoredInput.value = id;
+        const error = document.getElementById('modalError');
+        if (error) error.textContent = '';
+      } catch (error) {
+        console.warn('Patienten-ID Scan fehlgeschlagen', error);
+        status.textContent = 'Die ID konnte nicht sicher erkannt werden. Bitte erneut versuchen oder manuell eingeben.';
+        captureButton.disabled = false;
+      }
+    };
+  } catch (error) {
+    stopPatientScanner();
+    alert('Die Kamera konnte nicht geöffnet werden. Bitte Kamerazugriff erlauben oder die Patienten-ID manuell eingeben.');
+  }
+}
+
+function bindRestoredEntryFormHandlers() {
+  // Nach Rückkehr aus dem Scanner bleiben die bereits im Formular gesetzten onclick-Handler
+  // im gespeicherten DOM-Text nicht erhalten. Daher wird nur ein Hinweis gegeben, falls
+  // der Nutzer abbricht; ein erneutes Öffnen des Formulars ist der sichere Fallback.
+  const saveButton = document.getElementById('saveEntry');
+  if (saveButton && !saveButton.onclick) {
+    saveButton.onclick = () => {
+      alert('Bitte das Einsatzfenster einmal schließen und erneut öffnen. Deine Patienten-ID wurde nicht gespeichert.');
+    };
+  }
+}
+
+function stopPatientScanner() {
+  if (patientScannerStream) {
+    patientScannerStream.getTracks().forEach(track => track.stop());
+    patientScannerStream = null;
+  }
+}
+
+async function recognizePatientId(video) {
+  if (!window.Tesseract) throw new Error('OCR nicht geladen');
+  const canvas = document.getElementById('patientScannerCanvas');
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) throw new Error('Kamerabild noch nicht bereit');
+
+  // Nur ein schmaler Bereich in der Bildmitte wird verarbeitet.
+  const cropW = Math.round(vw * 0.88);
+  const cropH = Math.round(vh * 0.24);
+  const sx = Math.round((vw - cropW) / 2);
+  const sy = Math.round((vh - cropH) / 2);
+  canvas.width = cropW;
+  canvas.height = cropH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+
+  // Kontrast erhöhen, damit Monitor-Pixel/Moiré weniger stören.
+  const image = ctx.getImageData(0, 0, cropW, cropH);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+    const value = gray > 150 ? 255 : 0;
+    data[i] = data[i+1] = data[i+2] = value;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  const worker = await Tesseract.createWorker('eng', 1, {
+    logger: m => {
+      const status = document.getElementById('scannerStatus');
+      if (status && m.status === 'recognizing text' && typeof m.progress === 'number') {
+        status.textContent = `Patienten-ID wird lokal erkannt … ${Math.round(m.progress * 100)} %`;
+      }
+    }
+  });
+  try {
+    await worker.setParameters({
+      tessedit_char_whitelist: '0123456789',
+      tessedit_pageseg_mode: '7'
+    });
+    const result = await worker.recognize(canvas);
+    const candidates = String(result.data.text || '').match(/\d{9,}/g) || [];
+    if (!candidates.length) return '';
+    candidates.sort((x, y) => y.length - x.length);
+    return candidates[0].slice(0, 30);
+  } finally {
+    await worker.terminate();
+    // Der Canvas-Inhalt wird unmittelbar verworfen.
+    canvas.width = 1;
+    canvas.height = 1;
+  }
 }
 
 function privacyNote() {
@@ -1048,7 +1221,15 @@ function printMonthReport() {
     const entryRows = entries.length ? entries.map(entry => {
       const entryStart = new Date(entry.start);
       const entryEnd = new Date(entry.end);
-      return `<tr><td>${escapeHtml(entry.type)}</td><td>${fmtDate(entryStart)}</td><td>${fmtTime(entryStart)}</td><td>${fmtTime(entryEnd)}</td><td>${minutes(entry)} Min.</td><td>${escapeHtml(entry.patientId || '–')}</td><td>${escapeHtml(entry.note || '–')}</td></tr>`;
+      return `<tr>
+        <td data-label="Art">${escapeHtml(entry.type)}</td>
+        <td data-label="Datum">${fmtDate(entryStart)}</td>
+        <td data-label="Beginn">${fmtTime(entryStart)}</td>
+        <td data-label="Ende">${fmtTime(entryEnd)}</td>
+        <td data-label="Dauer">${minutes(entry)} Min.</td>
+        <td data-label="Patienten-ID">${escapeHtml(entry.patientId || '–')}</td>
+        <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}</td>
+      </tr>`;
     }).join('') : '<tr><td colspan="7" class="muted">Keine Einsätze erfasst</td></tr>';
     const pay = state.settings.showPay ? dutyPay(duty) : null;
     return `<section class="duty-block">
@@ -1061,7 +1242,28 @@ function printMonthReport() {
   if (!report) { alert('Bitte Pop-ups für den PDF-Bericht erlauben.'); return; }
   const monthPayHtml = state.settings.showPay ? `<div class="box">Vergütung<strong>${fmtMoney(monthPay(duties))}</strong></div>` : '';
   report.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Dienst – ${fmtMonth(selectedMonth)}</title><style>
-    *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:0;color:#111;background:#f4f5f7}.toolbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(255,255,255,.94);border-bottom:1px solid #ddd;backdrop-filter:blur(18px)}button{border:0;border-radius:12px;padding:11px 15px;font:inherit;font-weight:700}.back{background:#e9eaed;color:#111}.print{background:#0a84ff;color:#fff}.page{max-width:920px;margin:0 auto;padding:26px 24px 50px;background:#fff;min-height:100vh}h1{margin:0 0 4px}.intro{color:#666;margin:0}.summary{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.box{border:1px solid #ddd;border-radius:12px;padding:11px 15px;min-width:130px}.box strong{display:block;font-size:21px;margin-top:4px}.duty-block{margin:26px 0;break-inside:avoid-page}.duty-heading{display:flex;justify-content:space-between;gap:15px;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:8px}.duty-heading h2{font-size:18px;margin:0 0 3px}.duty-total{font-size:20px;font-weight:800;white-space:nowrap}.muted{color:#666}.duty-summary{display:flex;flex-wrap:wrap;gap:12px 24px;padding:10px 0;font-size:13px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #ddd;padding:8px 6px;text-align:left;vertical-align:top}th{background:#f3f4f6}.entries{margin-top:3px}@media(max-width:600px){.page{padding:20px 12px 42px}.toolbar{padding-left:10px;padding-right:10px}.duty-block{overflow-x:auto}.entries{min-width:690px}}@media print{body{background:#fff}.toolbar{display:none!important}.page{max-width:none;padding:0;min-height:0}.duty-block{break-inside:avoid-page}body{margin:0}@page{margin:14mm}}
+    *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;margin:0;color:#111;background:#f4f5f7}.toolbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(255,255,255,.94);border-bottom:1px solid #ddd;backdrop-filter:blur(18px)}button{border:0;border-radius:12px;padding:11px 15px;font:inherit;font-weight:700}.back{background:#e9eaed;color:#111}.print{background:#0a84ff;color:#fff}.page{max-width:920px;margin:0 auto;padding:26px 24px 50px;background:#fff;min-height:100vh}h1{margin:0 0 4px}.intro{color:#666;margin:0}.summary{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.box{border:1px solid #ddd;border-radius:12px;padding:11px 15px;min-width:130px}.box strong{display:block;font-size:21px;margin-top:4px}.duty-block{margin:26px 0;break-inside:avoid-page}.duty-heading{display:flex;justify-content:space-between;gap:15px;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:8px}.duty-heading h2{font-size:18px;margin:0 0 3px}.duty-total{font-size:20px;font-weight:800;white-space:nowrap}.muted{color:#666}.duty-summary{display:flex;flex-wrap:wrap;gap:12px 24px;padding:10px 0;font-size:13px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #ddd;padding:8px 6px;text-align:left;vertical-align:top}th{background:#f3f4f6}.entries{margin-top:3px;max-width:100%;table-layout:fixed}th,td{overflow-wrap:anywhere;word-break:break-word}
+    @media(max-width:600px){
+      html,body{max-width:100%;overflow-x:hidden}
+      .page{width:100%;max-width:100%;padding:20px 12px 42px}
+      .toolbar{padding-left:10px;padding-right:10px}
+      .toolbar button{min-width:0;padding:10px 12px}
+      .summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      .box{min-width:0}
+      .duty-block{overflow:visible}
+      .duty-heading{align-items:flex-start}
+      .duty-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+      .entries{display:block;width:100%;min-width:0;table-layout:auto}
+      .entries thead{display:none}
+      .entries tbody,.entries tr,.entries td{display:block;width:100%}
+      .entries tr{margin:10px 0 14px;border:1px solid #e1e2e5;border-radius:12px;overflow:hidden;background:#fff}
+      .entries td{display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:8px 10px;border-bottom:1px solid #ececef;font-size:13px}
+      .entries td:last-child{border-bottom:0}
+      .entries td::before{content:attr(data-label);font-weight:700;color:#555}
+      .entries td[colspan]{display:block;text-align:left}
+      .entries td[colspan]::before{content:none}
+    }
+    @media print{body{background:#fff}.toolbar{display:none!important}.page{max-width:none;padding:0;min-height:0}.duty-block{break-inside:avoid-page}body{margin:0}@page{margin:14mm}}
   </style></head><body><div class="toolbar"><button class="back" id="backBtn" type="button">‹ Zurück zur App</button><button class="print" id="printBtn" type="button">PDF erstellen / Drucken</button></div><main class="page"><h1>Dienst – ${fmtMonth(selectedMonth)}</h1><p class="intro">Monatsbericht · lokal auf dem Gerät erstellt</p><div class="summary"><div class="box">Telefonisch<strong>${totals.phoneHours} Std.</strong></div><div class="box">Im Haus<strong>${totals.houseHours} Std.</strong></div><div class="box">Gesamt<strong>${totals.phoneHours + totals.houseHours} Std.</strong></div>${monthPayHtml}</div>${dutySections}</main><script>
     document.getElementById('printBtn').onclick=()=>window.print();
     document.getElementById('backBtn').onclick=()=>{ if(window.opener){window.close(); setTimeout(()=>{try{window.opener.focus()}catch(e){}},0);} else if(history.length>1){history.back();} else {location.href='./';} };
@@ -1116,6 +1318,7 @@ modal.addEventListener('click', event => {
   }
 });
 modal.addEventListener('close', () => {
+  stopPatientScanner();
   modal.classList.remove('action-sheet-open');
   modal.classList.remove('duty-date-dialog');
 });

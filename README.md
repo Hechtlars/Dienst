@@ -60,3 +60,24 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Neues optionales Feld „Patienten-ID“ bei Einsatz erfassen und bearbeiten.
 - Patienten-ID wird in Einsatzübersicht, CSV und PDF-Bericht ausgegeben.
 - „Stundenlohn anzeigen“ und „Zeitstrahl anzeigen“ sind unter „Erweiterte Optionen“ versteckt.
+
+
+## Version 7.4
+- PDF-Vorschau auf dem iPhone responsiv überarbeitet.
+- Keine seitliche Verschiebung der gesamten Ansicht mehr.
+- Einsätze werden auf schmalen Displays als kompakte Karten dargestellt.
+- Beim Drucken bzw. Erstellen des PDFs bleibt die Tabellenansicht erhalten.
+
+
+## Version 7.5
+- Patienten-ID ist bei neuen/zu bearbeitenden Einsätzen erforderlich: nur Ziffern, mindestens 9 Stellen.
+- Kamera-Scan für Patienten-ID mit engem Scanbereich.
+- OCR-Erkennung erfolgt im Browser; die App speichert kein Kamerabild.
+- Gespeichert wird ausschließlich die erkannte Patienten-ID.
+- Info-Button erklärt die datensparsame Scan-Funktion.
+
+
+## Version 7.6
+- Patienten-ID wieder optional.
+- Ein Einsatz kann ohne Patienten-ID gespeichert werden.
+- Wird eine Patienten-ID eingetragen oder gescannt, muss sie aus mindestens 9 Ziffern bestehen.
