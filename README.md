@@ -156,3 +156,13 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Der Scanner prüft mehrere leicht versetzte Teilbereiche innerhalb des Rahmens, damit die ID nicht exakt zentriert werden muss.
 - Stärkere digitale Vergrößerung und moderate Schärfung vor der OCR.
 - Sicherheitslogik bleibt erhalten: nur zusammenhängende IDs ab 9 Ziffern, mehrfach übereinstimmende Erkennung und Bestätigung vor Übernahme.
+
+
+## Version 7.16
+- Live-OCR wurde durch einen gezielten Einzelbild-Scan ersetzt.
+- Nach „Foto erfassen“ versucht die App, über `ImageCapture.takePhoto()` ein echtes hochauflösendes Kamerafoto zu verwenden; falls der Browser dies nicht unterstützt, wird auf den aktuellen Videoframe zurückgefallen.
+- Der sichtbare Scanrahmen wird auf das aufgenommene Einzelbild zurückgerechnet.
+- Innerhalb des Rahmens werden mehrere leicht versetzte Teilbereiche geprüft.
+- Die Ausschnitte werden stark hochskaliert und in mehreren OCR-Varianten ausgewertet.
+- Eine ID wird nur übernommen, wenn sie innerhalb der Erkennung mehrfach übereinstimmt.
+- Das Einzelbild wird nicht gespeichert, sondern nur kurzfristig im Arbeitsspeicher verarbeitet und anschließend verworfen.

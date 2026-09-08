@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.15';
+const APP_VERSION = '7.16';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -908,7 +908,7 @@ async function openPatientIdScanner() {
       <button type="button" class="scanner-close" id="cancelPatientScan" aria-label="Scanner schließen">×</button>
       <div>
         <div class="scanner-title">Patienten-ID scannen</div>
-        <div class="scanner-subtitle">Etwas Abstand halten · ID vollständig in den Rahmen</div>
+        <div class="scanner-subtitle">Etwas Abstand halten · kurz fokussieren lassen</div>
       </div>
       <span class="scanner-spacer" aria-hidden="true"></span>
     </div>
@@ -917,16 +917,16 @@ async function openPatientIdScanner() {
       <div class="scanner-shade scanner-shade-top"></div>
       <div class="scanner-shade scanner-shade-bottom"></div>
       <div class="scanner-guide" aria-hidden="true">
-        <span>Etwas Abstand halten – ID vollständig im Rahmen</span>
+        <span>ID vollständig im Rahmen · dann Foto erfassen</span>
       </div>
     </div>
     <canvas id="patientScannerCanvas" hidden></canvas>
     <div id="scannerStatus" class="scanner-status">Kamera wird gestartet …</div>
     <div class="scanner-actions">
-      <button type="button" class="primary" id="capturePatientId">Jetzt erfassen</button>
+      <button type="button" class="primary" id="capturePatientId">Foto erfassen</button>
       <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>
     </div>
-    <div class="scanner-privacy">Kein Foto wird gespeichert. Übernommen wird ausschließlich die erkannte Patienten-ID.</div>
+    <div class="scanner-privacy">Das Foto wird nur kurzfristig im Arbeitsspeicher zur Erkennung verwendet und anschließend verworfen. Es wird nicht gespeichert. Übernommen wird ausschließlich die erkannte Patienten-ID.</div>
   </div>`;
   document.body.appendChild(overlay);
   // A modal <dialog> is promoted to the browser top layer and therefore reliably
@@ -935,7 +935,7 @@ async function openPatientIdScanner() {
 
   document.getElementById('cancelPatientScan').onclick = () => closePatientScanner(false);
   document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
-  document.getElementById('capturePatientId').onclick = () => scanPatientFrame(true);
+  document.getElementById('capturePatientId').onclick = capturePatientIdStill;
 
   try {
     patientScannerStream = await navigator.mediaDevices.getUserMedia({
@@ -994,11 +994,7 @@ async function openPatientIdScanner() {
       preserve_interword_spaces: '0'
     });
 
-    if (status) status.textContent = 'Bereit – ID ruhig in den Rahmen halten.';
-    // Automatische Erkennung. Nicht permanent filmen/archivieren:
-    // Es wird jeweils nur ein temporärer Canvas-Ausschnitt ausgewertet.
-    patientScanTimer = window.setInterval(() => scanPatientFrame(false), 1800);
-    window.setTimeout(() => scanPatientFrame(false), 500);
+    if (status) status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
   } catch (error) {
     console.warn('Patienten-ID Scanner:', error);
     const status = document.getElementById('scannerStatus');
@@ -1009,7 +1005,8 @@ async function openPatientIdScanner() {
   }
 }
 
-async function scanPatientFrame(manual) {
+
+async function capturePatientIdStill() {
   if (patientScanBusy || !patientOcrWorker) return;
 
   const video = document.getElementById('patientScannerVideo');
@@ -1019,187 +1016,171 @@ async function scanPatientFrame(manual) {
   const button = document.getElementById('capturePatientId');
 
   if (!video || !canvas || !guide || !video.videoWidth || !video.videoHeight) {
-    if (manual && status) status.textContent = 'Kamerabild noch nicht bereit. Bitte kurz warten.';
+    if (status) status.textContent = 'Kamerabild noch nicht bereit. Bitte kurz warten.';
     return;
   }
 
   patientScanBusy = true;
-  if (button && manual) button.disabled = true;
-  if (status) status.textContent = manual ? 'ID wird erkannt …' : 'Suche Patienten-ID …';
+  if (button) button.disabled = true;
+  if (status) status.textContent = 'Hochauflösendes Bild wird erfasst …';
+
+  let bitmap = null;
 
   try {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
+    const track = patientScannerStream?.getVideoTracks?.()[0];
+    let sourceWidth = video.videoWidth;
+    let sourceHeight = video.videoHeight;
+    let drawSource = video;
+
+    if (track && 'ImageCapture' in window) {
+      try {
+        const imageCapture = new ImageCapture(track);
+        const blob = await imageCapture.takePhoto();
+        bitmap = await createImageBitmap(blob);
+        sourceWidth = bitmap.width;
+        sourceHeight = bitmap.height;
+        drawSource = bitmap;
+      } catch (error) {
+        console.debug('ImageCapture nicht verfügbar, Videoframe wird verwendet:', error);
+      }
+    }
+
+    if (status) status.textContent = 'Patienten-ID wird lokal erkannt …';
+
     const videoRect = video.getBoundingClientRect();
     const guideRect = guide.getBoundingClientRect();
 
     const displayW = videoRect.width;
     const displayH = videoRect.height;
-    const coverScale = Math.max(displayW / vw, displayH / vh);
-    const renderedW = vw * coverScale;
-    const renderedH = vh * coverScale;
+    const coverScale = Math.max(displayW / sourceWidth, displayH / sourceHeight);
+    const renderedW = sourceWidth * coverScale;
+    const renderedH = sourceHeight * coverScale;
     const cropOffsetX = (renderedW - displayW) / 2;
     const cropOffsetY = (renderedH - displayH) / 2;
 
-    const baseLeft = guideRect.left - videoRect.left;
-    const baseTop = guideRect.top - videoRect.top;
+    const guideLeft = guideRect.left - videoRect.left;
+    const guideTop = guideRect.top - videoRect.top;
 
-    let baseSx = (baseLeft + cropOffsetX) / coverScale;
-    let baseSy = (baseTop + cropOffsetY) / coverScale;
+    let baseSx = (guideLeft + cropOffsetX) / coverScale;
+    let baseSy = (guideTop + cropOffsetY) / coverScale;
     let baseW = guideRect.width / coverScale;
     let baseH = guideRect.height / coverScale;
 
-    // Der sichtbare Rahmen bleibt großzügig. Innerhalb davon werden mehrere leicht
-    // verschobene Teilbereiche geprüft, damit die ID nicht millimetergenau sitzen muss.
+    const padX = baseW * 0.06;
+    const padY = baseH * 0.12;
+    baseSx -= padX;
+    baseSy -= padY;
+    baseW += padX * 2;
+    baseH += padY * 2;
+
+    baseSx = Math.max(0, baseSx);
+    baseSy = Math.max(0, baseSy);
+    baseW = Math.min(sourceWidth - baseSx, baseW);
+    baseH = Math.min(sourceHeight - baseSy, baseH);
+
     const regions = [
-      { dx: 0.00, dy: 0.00, sx: 1.00, sy: 1.00 },
-      { dx: -0.05, dy: 0.00, sx: 0.90, sy: 0.84 },
-      { dx:  0.05, dy: 0.00, sx: 0.90, sy: 0.84 },
-      { dx: 0.00, dy: -0.07, sx: 0.94, sy: 0.78 },
-      { dx: 0.00, dy:  0.07, sx: 0.94, sy: 0.78 }
+      { dx: 0.00, dy: 0.00, scaleX: 1.00, scaleY: 1.00 },
+      { dx: 0.00, dy: -0.08, scaleX: 0.96, scaleY: 0.78 },
+      { dx: 0.00, dy:  0.08, scaleX: 0.96, scaleY: 0.78 },
+      { dx: -0.05, dy: 0.00, scaleX: 0.90, scaleY: 0.82 },
+      { dx:  0.05, dy: 0.00, scaleX: 0.90, scaleY: 0.82 }
     ];
 
     const extractPatientId = (text) => {
-      const ids = [...String(text || '').matchAll(/(^|[^\d])(\d{9,30})(?=$|[^\d])/g)]
-        .map(match => match[2])
+      const matches = [...String(text || '').matchAll(/(^|[^\d])(\d{9,30})(?=$|[^\d])/g)]
+        .map(m => m[2])
         .filter(Boolean);
-      const unique = [...new Set(ids)];
+      const unique = [...new Set(matches)];
       return unique.length === 1 ? unique[0] : '';
     };
 
     const idsSeen = [];
 
-    const runOcrOnRegion = async (region) => {
-      let cropW = baseW * region.sx;
-      let cropH = baseH * region.sy;
+    const runPass = async (imageData, psm) => {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.putImageData(imageData, 0, 0);
+      await patientOcrWorker.setParameters({
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: String(psm),
+        preserve_interword_spaces: '0'
+      });
+      const result = await patientOcrWorker.recognize(canvas);
+      const id = extractPatientId(result?.data?.text || '');
+      if (id) idsSeen.push(id);
+    };
+
+    for (const region of regions) {
+      let cropW = baseW * region.scaleX;
+      let cropH = baseH * region.scaleY;
       let sx = baseSx + (baseW - cropW) / 2 + baseW * region.dx;
       let sy = baseSy + (baseH - cropH) / 2 + baseH * region.dy;
 
-      sx = Math.max(0, Math.min(vw - 1, sx));
-      sy = Math.max(0, Math.min(vh - 1, sy));
-      cropW = Math.max(1, Math.min(vw - sx, cropW));
-      cropH = Math.max(1, Math.min(vh - sy, cropH));
+      sx = Math.max(0, Math.min(sourceWidth - 1, sx));
+      sy = Math.max(0, Math.min(sourceHeight - 1, sy));
+      cropW = Math.max(1, Math.min(sourceWidth - sx, cropW));
+      cropH = Math.max(1, Math.min(sourceHeight - sy, cropH));
 
-      // Stärker digital vergrößern, sodass man mit der Kamera weiter weg bleiben kann.
-      const targetWidth = Math.min(2600, Math.max(1800, Math.round(cropW * 3.0)));
+      const targetWidth = Math.min(3200, Math.max(2100, Math.round(cropW * 3.6)));
       const scale = targetWidth / cropW;
       canvas.width = targetWidth;
-      canvas.height = Math.max(260, Math.round(cropH * scale));
+      canvas.height = Math.max(300, Math.round(cropH * scale));
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(drawSource, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-      // Graustufen + moderate Kontrastanhebung + einfache Schärfung.
-      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = image.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const v = Math.max(0, Math.min(255, (g - 128) * 1.45 + 128));
-        d[i] = d[i + 1] = d[i + 2] = v;
+      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const gray = new ImageData(
+        new Uint8ClampedArray(original.data),
+        original.width,
+        original.height
+      );
+      for (let i = 0; i < gray.data.length; i += 4) {
+        const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
+        const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
+        gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
       }
-      ctx.putImageData(image, 0, 0);
+      await runPass(gray, 13);
 
-      // Leichte Unsharp-Mask über Canvas-Filter, falls unterstützt.
-      const temp = document.createElement('canvas');
-      temp.width = canvas.width;
-      temp.height = canvas.height;
-      const tctx = temp.getContext('2d');
-      tctx.filter = 'blur(1px)';
-      tctx.drawImage(canvas, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1.35;
-      ctx.drawImage(canvas, 0, 0);
-      ctx.globalAlpha = 0.35;
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.drawImage(temp, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-
-      const passes = [
-        { psm: '13', mode: 'normal' },
-        { psm: '8', mode: 'bw155' },
-      ];
-
-      for (const pass of passes) {
-        if (pass.mode === 'bw155') {
-          const bw = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const bd = bw.data;
-          for (let i = 0; i < bd.length; i += 4) {
-            const g = bd[i];
-            const v = g > 155 ? 255 : 0;
-            bd[i] = bd[i + 1] = bd[i + 2] = v;
-          }
-          ctx.putImageData(bw, 0, 0);
-        }
-
-        await patientOcrWorker.setParameters({
-          tessedit_char_whitelist: '0123456789',
-          tessedit_pageseg_mode: pass.psm,
-          preserve_interword_spaces: '0'
-        });
-        const result = await patientOcrWorker.recognize(canvas);
-        const id = extractPatientId(result?.data?.text || '');
-        if (id) idsSeen.push(id);
+      const bw = new ImageData(
+        new Uint8ClampedArray(original.data),
+        original.width,
+        original.height
+      );
+      for (let i = 0; i < bw.data.length; i += 4) {
+        const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
+        const v = g > 150 ? 255 : 0;
+        bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
       }
-    };
-
-    // Zuerst Mitte; nur wenn nötig weitere Teilbereiche.
-    for (let i = 0; i < regions.length; i++) {
-      await runOcrOnRegion(regions[i]);
+      await runPass(bw, 8);
 
       const countsNow = idsSeen.reduce((m, id) => {
         m[id] = (m[id] || 0) + 1;
         return m;
       }, {});
-      const winnerNow = Object.entries(countsNow)
+      const winner = Object.entries(countsNow)
         .filter(([, count]) => count >= 2)
-        .sort((a, b) => b[1] - a[1])[0]?.[0];
+        .sort((x, y) => y[1] - x[1])[0]?.[0];
 
-      if (winnerNow) break;
-    }
-
-    const counts = idsSeen.reduce((m, id) => {
-      m[id] = (m[id] || 0) + 1;
-      return m;
-    }, {});
-    const id = Object.entries(counts)
-      .filter(([, count]) => count >= 2)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-
-    if (id) {
-      if (patientScanCandidate === id) patientScanCandidateHits += 1;
-      else {
-        patientScanCandidate = id;
-        patientScanCandidateHits = 1;
-      }
-
-      if (patientScanCandidateHits < 2) {
-        if (status) {
-          status.textContent = `Mögliche ID: ${id} – wird noch einmal geprüft …`;
-          status.classList.remove('scanner-success');
-        }
-        if (manual) window.setTimeout(() => scanPatientFrame(false), 250);
+      if (winner) {
+        recognizedPatientIdPending = winner;
+        showPatientIdConfirmation(winner);
         return;
       }
-
-      recognizedPatientIdPending = id;
-      showPatientIdConfirmation(id);
-      return;
     }
 
-    patientScanCandidate = '';
-    patientScanCandidateHits = 0;
     if (status) {
-      status.textContent = manual
-        ? 'Noch keine eindeutige ID erkannt. Bitte etwas Abstand halten und die ID vollständig in den Rahmen legen.'
-        : 'Noch keine eindeutige ID erkannt – etwas Abstand halten und ruhig halten.';
+      status.textContent = 'Keine eindeutige ID erkannt. Bitte etwas Abstand halten, kurz fokussieren lassen und erneut „Foto erfassen“ tippen.';
     }
   } catch (error) {
-    console.warn('OCR-Erkennung fehlgeschlagen', error);
+    console.warn('Foto-OCR fehlgeschlagen', error);
     if (status) status.textContent = 'Erkennung fehlgeschlagen. Bitte erneut versuchen oder manuell eingeben.';
   } finally {
+    if (bitmap) {
+      try { bitmap.close(); } catch (_) {}
+    }
     if (canvas) {
       canvas.width = 1;
       canvas.height = 1;
@@ -1250,16 +1231,14 @@ function showPatientIdConfirmation(id) {
     patientScanCandidateHits = 0;
     recognizedPatientIdPending = '';
     confirmation.innerHTML = `
-      <button type="button" class="primary" id="capturePatientId">Jetzt erfassen</button>
+      <button type="button" class="primary" id="capturePatientId">Foto erfassen</button>
       <button type="button" class="secondary-button" id="enterPatientIdManually">Manuell eingeben</button>`;
-    document.getElementById('capturePatientId').onclick = () => scanPatientFrame(true);
+    document.getElementById('capturePatientId').onclick = capturePatientIdStill;
     document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
     if (status) {
-      status.textContent = 'Bereit – ID ruhig in den Rahmen halten.';
+      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
       status.classList.remove('scanner-success');
     }
-    patientScanTimer = window.setInterval(() => scanPatientFrame(false), 1800);
-    window.setTimeout(() => scanPatientFrame(false), 300);
   };
 }
 
