@@ -523,3 +523,6 @@ dialog.patient-scanner-overlay .patient-scanner-panel{height:100dvh;min-height:1
 /* Version 7.16: bewusster Einzelbild-Scan statt Live-OCR */
 .scanner-actions .primary{font-weight:800}
 .scanner-status{min-height:48px}
+
+/* Version 7.17: PaddleOCR */
+.scanner-status.scanner-error { line-height: 1.35; }

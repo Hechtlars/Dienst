@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.16';
+const APP_VERSION = '7.17';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -860,7 +860,7 @@ function openEditEntry(dutyId, entryId) {
 
 
 let patientScannerStream = null;
-let patientOcrWorker = null;
+let patientOcrWorker = null; // PaddleOCR engine
 let patientScanTimer = null;
 let patientScanBusy = false;
 let patientScanTarget = null;
@@ -882,7 +882,7 @@ function bindPatientIdTools() {
 }
 
 function showPatientScanInfo() {
-  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nEs wird kein Foto gespeichert. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
+  alert('Patienten-ID scannen\n\nDie Kamera wird ausschließlich verwendet, um die Patienten-ID zu erfassen.\n\nDie Texterkennung läuft lokal im Browser. Es wird kein Foto gespeichert oder an einen OCR-Dienst hochgeladen. Andere sichtbare Patientendaten wie Name oder Geburtsdatum werden nicht übernommen oder gespeichert.\n\nGespeichert wird ausschließlich die erkannte Patienten-ID lokal auf diesem Gerät.');
 }
 
 async function openPatientIdScanner() {
@@ -975,31 +975,35 @@ async function openPatientIdScanner() {
     const status = document.getElementById('scannerStatus');
     if (status) status.textContent = 'OCR wird vorbereitet …';
 
-    if (!window.Tesseract) {
-      throw new Error('OCR-Bibliothek konnte nicht geladen werden');
-    }
+    // Version 7.17: PaddleOCR statt Tesseract.
+    // Bibliothek und Modelle werden geladen, die Bildauswertung selbst läuft lokal
+    // im Browser. Es wird kein Kamerabild an einen OCR-Dienst hochgeladen.
+    if (status) status.textContent = 'Neue Ziffernerkennung wird geladen …';
 
-    patientOcrWorker = await Tesseract.createWorker('eng', 1, {
-      logger: message => {
-        const currentStatus = document.getElementById('scannerStatus');
-        if (currentStatus && message.status === 'loading tesseract core') {
-          currentStatus.textContent = 'Ziffernerkennung wird geladen …';
-        }
+    const paddleModule = await import('https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm');
+    const PaddleOCR = paddleModule.PaddleOCR;
+    if (!PaddleOCR) throw new Error('PaddleOCR konnte nicht geladen werden');
+
+    patientOcrWorker = await PaddleOCR.create({
+      lang: 'en',
+      ocrVersion: 'PP-OCRv5',
+      textDetectionBatchSize: 1,
+      textRecognitionBatchSize: 4,
+      worker: false,
+      ortOptions: {
+        backend: 'wasm',
+        wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/',
+        numThreads: 1,
+        simd: true
       }
     });
 
-    await patientOcrWorker.setParameters({
-      tessedit_char_whitelist: '0123456789',
-      tessedit_pageseg_mode: '13',
-      preserve_interword_spaces: '0'
-    });
-
-    if (status) status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
+    if (status) status.textContent = 'Bereit – ID vollständig in den Rahmen und dann „Foto erfassen“ tippen.';
   } catch (error) {
     console.warn('Patienten-ID Scanner:', error);
     const status = document.getElementById('scannerStatus');
     if (status) {
-      status.textContent = 'Die Ziffernerkennung konnte nicht gestartet werden. Internetverbindung prüfen oder ID manuell eingeben.';
+      status.textContent = 'Die neue Ziffernerkennung konnte nicht gestartet werden. Beim ersten Start werden OCR-Modelle geladen; bitte Internetverbindung prüfen oder ID manuell eingeben.';
       status.classList.add('scanner-error');
     }
   }
@@ -1094,19 +1098,34 @@ async function capturePatientIdStill() {
       return unique.length === 1 ? unique[0] : '';
     };
 
-    const idsSeen = [];
+    const observations = [];
 
-    const runPass = async (imageData, psm) => {
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.putImageData(imageData, 0, 0);
-      await patientOcrWorker.setParameters({
-        tessedit_char_whitelist: '0123456789',
-        tessedit_pageseg_mode: String(psm),
-        preserve_interword_spaces: '0'
+    const candidateFromItem = (item) => {
+      const raw = String(item?.text || '').trim();
+      if (!raw) return null;
+
+      const normalized = raw.replace(/[\s.\-_/]/g, '');
+      if (!/^\d{9,30}$/.test(normalized)) return null;
+
+      const score = Number(item?.score ?? 0);
+      return { id: normalized, score };
+    };
+
+    const runPaddle = async (sourceCanvas, variant) => {
+      const [result] = await patientOcrWorker.predict(sourceCanvas, {
+        textDetLimitSideLen: 1600,
+        textDetLimitType: 'max',
+        textDetMaxSideLimit: 2400,
+        textDetThresh: 0.20,
+        textDetBoxThresh: 0.30,
+        textDetUnclipRatio: 1.35,
+        textRecScoreThresh: 0.30
       });
-      const result = await patientOcrWorker.recognize(canvas);
-      const id = extractPatientId(result?.data?.text || '');
-      if (id) idsSeen.push(id);
+
+      for (const item of (result?.items || [])) {
+        const candidate = candidateFromItem(item);
+        if (candidate) observations.push({ ...candidate, variant });
+      }
     };
 
     for (const region of regions) {
@@ -1120,18 +1139,19 @@ async function capturePatientIdStill() {
       cropW = Math.max(1, Math.min(sourceWidth - sx, cropW));
       cropH = Math.max(1, Math.min(sourceHeight - sy, cropH));
 
-      const targetWidth = Math.min(3200, Math.max(2100, Math.round(cropW * 3.6)));
+      const targetWidth = Math.min(2200, Math.max(1400, Math.round(cropW * 2.2)));
       const scale = targetWidth / cropW;
       canvas.width = targetWidth;
-      canvas.height = Math.max(300, Math.round(cropH * scale));
+      canvas.height = Math.max(260, Math.round(cropH * scale));
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(drawSource, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      await runPaddle(canvas, 'original');
 
+      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const gray = new ImageData(
         new Uint8ClampedArray(original.data),
         original.width,
@@ -1139,34 +1159,38 @@ async function capturePatientIdStill() {
       );
       for (let i = 0; i < gray.data.length; i += 4) {
         const g = 0.299 * gray.data[i] + 0.587 * gray.data[i + 1] + 0.114 * gray.data[i + 2];
-        const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
+        const v = Math.max(0, Math.min(255, (g - 128) * 1.28 + 128));
         gray.data[i] = gray.data[i + 1] = gray.data[i + 2] = v;
       }
-      await runPass(gray, 13);
+      ctx.putImageData(gray, 0, 0);
+      await runPaddle(canvas, 'gray');
 
-      const bw = new ImageData(
-        new Uint8ClampedArray(original.data),
-        original.width,
-        original.height
-      );
-      for (let i = 0; i < bw.data.length; i += 4) {
-        const g = 0.299 * bw.data[i] + 0.587 * bw.data[i + 1] + 0.114 * bw.data[i + 2];
-        const v = g > 150 ? 255 : 0;
-        bw.data[i] = bw.data[i + 1] = bw.data[i + 2] = v;
-      }
-      await runPass(bw, 8);
-
-      const countsNow = idsSeen.reduce((m, id) => {
-        m[id] = (m[id] || 0) + 1;
-        return m;
+      const grouped = observations.reduce((map, obs) => {
+        if (!map[obs.id]) map[obs.id] = { id: obs.id, hits: 0, maxScore: 0, sumScore: 0 };
+        map[obs.id].hits += 1;
+        map[obs.id].maxScore = Math.max(map[obs.id].maxScore, obs.score);
+        map[obs.id].sumScore += obs.score;
+        return map;
       }, {});
-      const winner = Object.entries(countsNow)
-        .filter(([, count]) => count >= 2)
-        .sort((x, y) => y[1] - x[1])[0]?.[0];
 
-      if (winner) {
-        recognizedPatientIdPending = winner;
-        showPatientIdConfirmation(winner);
+      const ranked = Object.values(grouped).sort((x, y) => {
+        const xRank = x.hits * 2 + x.maxScore + x.sumScore * 0.2;
+        const yRank = y.hits * 2 + y.maxScore + y.sumScore * 0.2;
+        return yRank - xRank;
+      });
+
+      const winner = ranked[0];
+      const runnerUp = ranked[1];
+
+      const winnerIsSafe = winner && (
+        (winner.hits >= 2 && winner.maxScore >= 0.45) ||
+        (winner.hits >= 1 && winner.maxScore >= 0.86)
+      );
+      const clearlyAhead = !runnerUp || winner.hits > runnerUp.hits || winner.maxScore > runnerUp.maxScore + 0.18;
+
+      if (winnerIsSafe && clearlyAhead) {
+        recognizedPatientIdPending = winner.id;
+        showPatientIdConfirmation(winner.id);
         return;
       }
     }
@@ -1236,7 +1260,7 @@ function showPatientIdConfirmation(id) {
     document.getElementById('capturePatientId').onclick = capturePatientIdStill;
     document.getElementById('enterPatientIdManually').onclick = () => closePatientScanner(false);
     if (status) {
-      status.textContent = 'Bereit – etwas Abstand halten und dann „Foto erfassen“ tippen.';
+      status.textContent = 'Bereit – ID vollständig in den Rahmen und dann „Foto erfassen“ tippen.';
       status.classList.remove('scanner-success');
     }
   };
@@ -1252,9 +1276,12 @@ async function closePatientScanner(restoreRecognizedId = false) {
     patientScannerStream = null;
   }
   if (patientOcrWorker) {
-    const worker = patientOcrWorker;
+    const engine = patientOcrWorker;
     patientOcrWorker = null;
-    try { await worker.terminate(); } catch (_) {}
+    try {
+      if (typeof engine.dispose === 'function') await engine.dispose();
+      else if (typeof engine.terminate === 'function') await engine.terminate();
+    } catch (_) {}
   }
   patientScanBusy = false;
   const overlay = document.getElementById('patientScannerOverlay');

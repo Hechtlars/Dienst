@@ -166,3 +166,16 @@ Alle persönlichen Daten bleiben ausschließlich im lokalen Browser-Speicher des
 - Die Ausschnitte werden stark hochskaliert und in mehreren OCR-Varianten ausgewertet.
 - Eine ID wird nur übernommen, wenn sie innerhalb der Erkennung mehrfach übereinstimmt.
 - Das Einzelbild wird nicht gespeichert, sondern nur kurzfristig im Arbeitsspeicher verarbeitet und anschließend verworfen.
+
+
+## Version 7.17
+- Tesseract wurde aus dem Patienten-ID-Scanner entfernt.
+- Neue OCR-Engine: offizielles PaddleOCR.js mit PP-OCRv5.
+- Inferenz läuft im Browser über ONNX Runtime Web / WebAssembly.
+- Kamerabilder werden nicht an einen OCR-Dienst gesendet.
+- PaddleOCR analysiert den gezielten Einzelbild-Ausschnitt in Original- und Graustufenvariante.
+- Nur Zahlenfolgen mit mindestens 9 Ziffern werden als Patienten-ID berücksichtigt.
+- Leerzeichen/Punkte/Bindestriche dürfen nur innerhalb derselben von PaddleOCR erkannten Textzeile normalisiert werden; getrennte Textzeilen werden niemals zusammengefügt.
+- Mehrere Kandidaten werden nach Trefferzahl und Paddle-Konfidenz bewertet; unsichere Ergebnisse werden nicht automatisch übernommen.
+- Vor der Übernahme bleibt die sichtbare Bestätigung der erkannten Patienten-ID erhalten.
+- Beim ersten Scan müssen OCR-Bibliothek und Modelle aus dem Internet geladen werden; die eigentliche Bildauswertung erfolgt danach lokal im Browser.
