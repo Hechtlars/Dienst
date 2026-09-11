@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.30';
+const APP_VERSION = '7.34';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -222,9 +222,18 @@ function fmtMonth(date) { return new Intl.DateTimeFormat('de-DE', { month: 'long
 function minutes(entry) { return Math.max(0, Math.round((new Date(entry.end) - new Date(entry.start)) / 60000)); }
 function sum(duty, type) { return duty.entries.filter(entry => entry.type === type).reduce((total, entry) => total + minutes(entry), 0); }
 function roundedHours(minuteCount) { return Math.ceil(minuteCount / 60); }
+// Rufdienst-Regel:
+// - Telefonisch: alle Telefonminuten eines Dienstes addieren und einmal auf volle Stunden aufrunden.
+// - Im Haus: jeden einzelnen Hauseinsatz separat auf volle Stunden aufrunden und anschließend addieren.
+function phoneRoundedHours(duty) { return roundedHours(sum(duty, 'Telefonisch')); }
+function houseRoundedHours(duty) {
+  return duty.entries
+    .filter(entry => entry.type === 'Im Haus')
+    .reduce((total, entry) => total + roundedHours(minutes(entry)), 0);
+}
 function hourLabel(value) { return `${value} ${value === 1 ? 'Stunde' : 'Stunden'}`; }
 function fmtMoney(value) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value); }
-function dutyRoundedHours(duty) { return roundedHours(sum(duty, 'Telefonisch')) + roundedHours(sum(duty, 'Im Haus')); }
+function dutyRoundedHours(duty) { return phoneRoundedHours(duty) + houseRoundedHours(duty); }
 function dutyAllowanceMultiplier(duty) { const day = parseLocalDate(duty.date).getDay(); return day === 0 || day === 6 ? 4 : 2; }
 function ratesForDuty(duty) {
   const settings = state.settings || normalizeSettings();
@@ -254,8 +263,8 @@ function monthTotals(duties) {
   return duties.reduce((totals, duty) => {
     totals.phoneMinutes += sum(duty, 'Telefonisch');
     totals.houseMinutes += sum(duty, 'Im Haus');
-    totals.phoneHours += roundedHours(sum(duty, 'Telefonisch'));
-    totals.houseHours += roundedHours(sum(duty, 'Im Haus'));
+    totals.phoneHours += phoneRoundedHours(duty);
+    totals.houseHours += houseRoundedHours(duty);
     return totals;
   }, { phoneMinutes: 0, houseMinutes: 0, phoneHours: 0, houseHours: 0 });
 }
@@ -440,8 +449,8 @@ function renderDutyDetail(id) {
   const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
   const phoneMinutes = sum(duty, 'Telefonisch');
   const houseMinutes = sum(duty, 'Im Haus');
-  const phoneHours = roundedHours(phoneMinutes);
-  const houseHours = roundedHours(houseMinutes);
+  const phoneHours = phoneRoundedHours(duty);
+  const houseHours = houseRoundedHours(duty);
   const totalHours = phoneHours + houseHours;
   main.innerHTML = `
     <button class="text-button" id="backMonth" type="button">‹ Zurück zur Übersicht</button>
@@ -452,9 +461,9 @@ function renderDutyDetail(id) {
     </section>
     <div class="card-header">Statistik</div>
     <section class="card">
-      <div class="row"><div class="row-main"><div class="row-title">Telefonisch</div><div class="row-subtitle">${phoneMinutes} Minuten · separat aufgerundet</div></div><div class="row-value strong-value">${hourLabel(phoneHours)}</div></div>
-      <div class="row"><div class="row-main"><div class="row-title">Im Haus</div><div class="row-subtitle">${houseMinutes} Minuten · separat aufgerundet</div></div><div class="row-value strong-value">${hourLabel(houseHours)}</div></div>
-      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamt</div><div class="row-subtitle">Summe der beiden gerundeten Werte</div></div><div class="row-value total-value">${hourLabel(totalHours)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Telefonisch</div><div class="row-subtitle">${phoneMinutes} Minuten · gemeinsam aufgerundet</div></div><div class="row-value strong-value">${hourLabel(phoneHours)}</div></div>
+      <div class="row"><div class="row-main"><div class="row-title">Im Haus</div><div class="row-subtitle">${houseMinutes} Minuten · jeder Einsatz einzeln aufgerundet</div></div><div class="row-value strong-value">${hourLabel(houseHours)}</div></div>
+      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamt</div><div class="row-subtitle">Telefon gesamt gerundet + Hauseinsätze einzeln gerundet</div></div><div class="row-value total-value">${hourLabel(totalHours)}</div></div>
     </section>
     <div class="card-header">Einsätze</div>
     <button class="primary" id="newHistoricalEntry" type="button">+ Einsatz hinzufügen</button>
@@ -498,7 +507,7 @@ function entryRow(duty, entry, withDelete) {
         ${entry.patientIdPhoto ? `<button type="button" class="entry-photo-link" data-photo-duty="${escapeHtml(duty.id)}" data-photo-entry="${escapeHtml(entry.id)}">📷 Patienten-ID anzeigen</button>` : ''}
         ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
       </div>
-      <div class="row-value">${minutes(entry)} Min.</div>
+      <div class="row-value">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</div>
       <span class="chevron">›</span>
     </div>
   </div>`;
@@ -1089,7 +1098,7 @@ function exportMonthCsv() {
   if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
   const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Patienten-ID', 'Bemerkung', 'Gerundete Stunden je Dienstart']];
   for (const duty of duties) {
-    const rounded = { 'Telefonisch': roundedHours(sum(duty, 'Telefonisch')), 'Im Haus': roundedHours(sum(duty, 'Im Haus')) };
+    const rounded = { 'Telefonisch': phoneRoundedHours(duty), 'Im Haus': houseRoundedHours(duty) };
     if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '', '0']);
     for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
       const start = new Date(entry.start);
@@ -1116,15 +1125,15 @@ function printMonthReport() {
         <td data-label="Datum">${fmtDate(entryStart)}</td>
         <td data-label="Beginn">${fmtTime(entryStart)}</td>
         <td data-label="Ende">${fmtTime(entryEnd)}</td>
-        <td data-label="Dauer">${minutes(entry)} Min.</td>
+        <td data-label="Dauer">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</td>
         <td data-label="Patienten-ID">${escapeHtml(entry.patientId || '–')}</td>
         <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="7" class="muted">Keine Einsätze erfasst</td></tr>';
     const pay = state.settings.showPay ? dutyPay(duty) : null;
     return `<section class="duty-block">
-      <div class="duty-heading"><div><h2>${fmtDate(dutyStart(duty))}</h2><div class="muted">${dutyTimeText(duty)}</div></div><div class="duty-total">${roundedHours(phoneMinutes) + roundedHours(houseMinutes)} Std.</div></div>
-      <div class="duty-summary"><span>Telefonisch: <strong>${phoneMinutes} Min. / ${roundedHours(phoneMinutes)} Std.</strong></span><span>Im Haus: <strong>${houseMinutes} Min. / ${roundedHours(houseMinutes)} Std.</strong></span>${pay ? `<span>Vergütung: <strong>${fmtMoney(pay.total)}</strong></span>` : ''}</div>
+      <div class="duty-heading"><div><h2>${fmtDate(dutyStart(duty))}</h2><div class="muted">${dutyTimeText(duty)}</div></div><div class="duty-total">${dutyRoundedHours(duty)} Std.</div></div>
+      <div class="duty-summary"><span>Telefonisch: <strong>${phoneMinutes} Min. / ${phoneRoundedHours(duty)} Std.</strong></span><span>Im Haus: <strong>${houseMinutes} Min. / ${houseRoundedHours(duty)} Std.</strong></span>${pay ? `<span>Vergütung: <strong>${fmtMoney(pay.total)}</strong></span>` : ''}</div>
       <table class="entries"><thead><tr><th>Art</th><th>Datum</th><th>Beginn</th><th>Ende</th><th>Dauer</th><th>Patienten-ID</th><th>Bemerkung</th></tr></thead><tbody>${entryRows}</tbody></table>
     </section>`;
   }).join('');
@@ -1284,13 +1293,13 @@ function patientPhotoCropUi() {
   d.className = 'patient-photo-crop';
   d.innerHTML = `
     <div class="pp-crop-shell">
-      <div class="pp-head">
+      <div class="pp-head pp-crop-head">
         <button type="button" id="ppCropCancel">Abbrechen</button>
         <strong>Ausschnitt festlegen</strong>
         <button type="button" id="ppCropSave">Übernehmen</button>
       </div>
       <p class="pp-help">
-        Den weißen Rahmen direkt mit dem Finger verschieben. Die vier Eckpunkte haben extra große Touch-Flächen, damit sie sich leichter greifen lassen.
+        Verschiebe den weißen Rahmen auf die Patienten-ID. Die Eckpunkte lassen sich zum Verkleinern oder Vergrößern ziehen.
       </p>
       <div id="ppStage" class="pp-stage">
         <img id="ppImage" alt="">
@@ -1299,27 +1308,54 @@ function patientPhotoCropUi() {
         </div>
       </div>
       <p class="pp-help pp-crop-hint">
-        Nur der Bereich innerhalb des weißen Rahmens wird gespeichert. Das Foto selbst bleibt unverändert und wird danach verworfen.
+        Der Rahmen bleibt vollständig innerhalb des aufgenommenen Fotos. Gespeichert wird nur der ausgewählte Ausschnitt.
       </p>
     </div>`;
 
   document.body.appendChild(d);
 
   const stage = d.querySelector('#ppStage');
+  const img = d.querySelector('#ppImage');
   const box = d.querySelector('#ppBox');
 
+  const imageRectInStage = () => {
+    const sr = stage.getBoundingClientRect();
+    if (!img.naturalWidth || !img.naturalHeight || !sr.width || !sr.height) {
+      return { left: 0, top: 0, width: sr.width || 1, height: sr.height || 1 };
+    }
+
+    const imageAspect = img.naturalWidth / img.naturalHeight;
+    const stageAspect = sr.width / sr.height;
+
+    let width, height, left, top;
+    if (imageAspect > stageAspect) {
+      width = sr.width;
+      height = width / imageAspect;
+      left = 0;
+      top = (sr.height - height) / 2;
+    } else {
+      height = sr.height;
+      width = height * imageAspect;
+      top = 0;
+      left = (sr.width - width) / 2;
+    }
+    return { left, top, width, height };
+  };
+
   const render = () => {
-    box.style.left = `${patientPhotoCrop.x * 100}%`;
-    box.style.top = `${patientPhotoCrop.y * 100}%`;
-    box.style.width = `${patientPhotoCrop.w * 100}%`;
-    box.style.height = `${patientPhotoCrop.h * 100}%`;
+    const ir = imageRectInStage();
+    box.style.left = `${ir.left + patientPhotoCrop.x * ir.width}px`;
+    box.style.top = `${ir.top + patientPhotoCrop.y * ir.height}px`;
+    box.style.width = `${patientPhotoCrop.w * ir.width}px`;
+    box.style.height = `${patientPhotoCrop.h * ir.height}px`;
   };
 
   const normalizedPoint = (clientX, clientY) => {
-    const r = stage.getBoundingClientRect();
+    const sr = stage.getBoundingClientRect();
+    const ir = imageRectInStage();
     return {
-      x: Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width))),
-      y: Math.max(0, Math.min(1, (clientY - r.top) / Math.max(1, r.height)))
+      x: Math.max(0, Math.min(1, (clientX - sr.left - ir.left) / Math.max(1, ir.width))),
+      y: Math.max(0, Math.min(1, (clientY - sr.top - ir.top) / Math.max(1, ir.height)))
     };
   };
 
@@ -1336,14 +1372,13 @@ function patientPhotoCropUi() {
 
   const updateDrag = (clientX, clientY) => {
     if (!patientPhotoDrag) return;
-
     const p = normalizedPoint(clientX, clientY);
     const q = patientPhotoDrag;
     const dx = p.x - q.x;
     const dy = p.y - q.y;
     const r = q.r;
-    const minW = 0.15;
-    const minH = 0.08;
+    const minW = 0.12;
+    const minH = 0.06;
 
     let left = r.x;
     let top = r.y;
@@ -1361,11 +1396,9 @@ function patientPhotoCropUi() {
       if (q.h.includes('b')) bottom = Math.min(1, Math.max(top + minH, r.y + r.h + dy));
       patientPhotoCrop = { x: left, y: top, w: right - left, h: bottom - top };
     }
-
     render();
   };
 
-  // Pointer Events (iOS Safari supports these; pointer capture prevents losing the drag).
   box.addEventListener('pointerdown', (e) => {
     const handle = e.target?.dataset?.h || 'move';
     beginDrag(e.clientX, e.clientY, handle, e.pointerId);
@@ -1384,15 +1417,14 @@ function patientPhotoCropUi() {
     try { box.releasePointerCapture(e.pointerId); } catch (_) {}
     patientPhotoDrag = null;
   };
+
   box.addEventListener('pointerup', finishPointer);
   box.addEventListener('pointercancel', finishPointer);
 
-  // Touch fallback for older/inconsistent iPhone WebKit behavior.
   box.addEventListener('touchstart', (e) => {
     if (!e.touches?.length) return;
     const t = e.touches[0];
-    const handle = e.target?.dataset?.h || 'move';
-    beginDrag(t.clientX, t.clientY, handle, 'touch');
+    beginDrag(t.clientX, t.clientY, e.target?.dataset?.h || 'move', 'touch');
     e.preventDefault();
   }, { passive: false });
 
@@ -1412,39 +1444,49 @@ function patientPhotoCropUi() {
     d.close();
   };
   d.querySelector('#ppCropSave').onclick = savePatientPhotoCrop;
+
   d._render = render;
+  window.addEventListener('resize', render);
   return d;
 }
 
 function openPatientPhotoCrop() {
   const d=patientPhotoCropUi(), img=d.querySelector('#ppImage');
-  patientPhotoCrop={x:.14,y:.40,w:.72,h:.20};
+  patientPhotoCrop={x:.18,y:.40,w:.64,h:.18};
   img.src=patientPhotoTempImage;
   img.onload=()=>d._render();
   d.showModal();
 }
 
 function savePatientPhotoCrop() {
-  const d=document.getElementById('patientPhotoCrop'), img=d.querySelector('#ppImage'), stage=d.querySelector('#ppStage'), box=d.querySelector('#ppBox');
-  const sr=stage.getBoundingClientRect(), br=box.getBoundingClientRect();
-  const ia=img.naturalWidth/img.naturalHeight, sa=sr.width/sr.height;
-  let dw,dh,ox,oy;
-  if(ia>sa){dw=sr.width;dh=dw/ia;ox=0;oy=(sr.height-dh)/2;}
-  else{dh=sr.height;dw=dh*ia;oy=0;ox=(sr.width-dw)/2;}
-  const l=Math.max(ox,br.left-sr.left), t=Math.max(oy,br.top-sr.top);
-  const r=Math.min(ox+dw,br.right-sr.left), b=Math.min(oy+dh,br.bottom-sr.top);
-  if(r<=l||b<=t){alert('Bitte den Rahmen über das Foto legen.');return;}
-  const sx=(l-ox)/dw*img.naturalWidth, sy=(t-oy)/dh*img.naturalHeight;
-  const sw=(r-l)/dw*img.naturalWidth, sh=(b-t)/dh*img.naturalHeight;
-  const out=document.createElement('canvas'), scale=Math.min(1,700/sw);
-  out.width=Math.max(1,Math.round(sw*scale)); out.height=Math.max(1,Math.round(sh*scale));
-  out.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,out.width,out.height);
-  const data=out.toDataURL('image/jpeg',.62);
-  const input=document.getElementById('entryPatientIdPhoto'), preview=document.getElementById('entryPatientIdPhotoPreview'), wrap=document.getElementById('entryPatientIdPhotoPreviewWrap');
-  if(input)input.value=data;
-  if(preview)preview.src=data;
-  if(wrap)wrap.hidden=false;
-  patientPhotoTempImage='';
+  const d = document.getElementById('patientPhotoCrop');
+  const img = d?.querySelector('#ppImage');
+  if (!d || !img?.naturalWidth || !img?.naturalHeight) return;
+
+  // patientPhotoCrop is now defined directly in image coordinates (0..1).
+  const sx = Math.round(patientPhotoCrop.x * img.naturalWidth);
+  const sy = Math.round(patientPhotoCrop.y * img.naturalHeight);
+  const sw = Math.max(1, Math.round(patientPhotoCrop.w * img.naturalWidth));
+  const sh = Math.max(1, Math.round(patientPhotoCrop.h * img.naturalHeight));
+
+  const out = document.createElement('canvas');
+  const scale = Math.min(1, 700 / sw);
+  out.width = Math.max(1, Math.round(sw * scale));
+  out.height = Math.max(1, Math.round(sh * scale));
+
+  const ctx = out.getContext('2d');
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+
+  const data = out.toDataURL('image/jpeg', .62);
+  const input = document.getElementById('entryPatientIdPhoto');
+  const preview = document.getElementById('entryPatientIdPhotoPreview');
+  const wrap = document.getElementById('entryPatientIdPhotoPreviewWrap');
+
+  if (input) input.value = data;
+  if (preview) preview.src = data;
+  if (wrap) wrap.hidden = false;
+
+  patientPhotoTempImage = '';
   d.close();
 }
 

@@ -570,3 +570,73 @@ dialog.action-sheet-open button {
   margin:0;
   padding-bottom:2px;
 }
+
+
+/* Version 7.31 – Formularfelder sauber innerhalb des Sheets */
+#modalContent .entry-form-body{
+  width:100%;
+  min-width:0;
+  padding-left:20px;
+  padding-right:20px;
+}
+
+#modalContent .entry-form-body label.field{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+
+#modalContent .entry-form-body label.field > input,
+#modalContent .entry-form-body label.field > select,
+#modalContent .entry-form-body label.field > textarea{
+  display:block;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  border-radius:14px !important;
+  overflow:hidden;
+}
+
+#modalContent .entry-form-body input[type="date"],
+#modalContent .entry-form-body input[type="time"]{
+  inline-size:100% !important;
+  min-inline-size:0 !important;
+  max-inline-size:100% !important;
+}
+
+/* Patienten-ID-Zeile darf ebenfalls niemals über den rechten Rand laufen */
+#modalContent .patient-id-row{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  grid-template-columns:minmax(0,1fr) 48px 38px;
+}
+
+/* Crop-Header bleibt auf schmalen iPhones vollständig sichtbar */
+#patientPhotoCrop .pp-crop-head{
+  grid-template-columns:minmax(72px,1fr) minmax(0,1.4fr) minmax(72px,1fr);
+  width:100%;
+  padding-left:4px;
+  padding-right:4px;
+}
+
+#patientPhotoCrop .pp-crop-head strong{
+  min-width:0;
+  font-size:17px;
+  white-space:nowrap;
+}
+
+#patientPhotoCrop .pp-crop-head button{
+  min-width:0;
+  font-size:15px;
+  white-space:nowrap;
+}
+
+#patientPhotoCrop #ppCropSave{
+  text-align:right;
+}
+
+/* Auswahlrahmen ist jetzt ausschließlich an die echte Fotofläche gebunden */
+#patientPhotoCrop .pp-stage{
+  position:relative;
+}

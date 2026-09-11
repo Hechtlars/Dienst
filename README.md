@@ -278,3 +278,27 @@ Es gibt keine OCR, keine Ziffernerkennung, kein Tesseract, kein PaddleOCR und ke
 - Die vier sichtbaren Eckpunkte bleiben klein, haben aber deutlich größere unsichtbare Touch-Flächen.
 - Rahmen weiterhin frei verschiebbar; Größenänderung weiterhin über alle vier Ecken.
 - Keine OCR oder Ziffernerkennung.
+
+
+## Version 7.31
+- Auswahlrahmen wird jetzt relativ zur tatsächlich sichtbaren Fotofläche berechnet, nicht mehr relativ zur schwarzen Bühne.
+- Der Rahmen und alle vier Eckpunkte können die Fotokanten nicht mehr überschreiten.
+- Speicherung nutzt exakt dieselben Bildkoordinaten wie der sichtbare Rahmen.
+- Kopfzeile der Zuschneideansicht für schmale iPhones korrigiert; „Übernehmen“ bleibt vollständig sichtbar.
+- Eingabefelder im Einsatzformular werden strikt auf die verfügbare Sheet-Breite begrenzt und rechts wie links sauber abgerundet.
+
+
+## Version 7.33
+- Rundungslogik für Rufdienste an die anhand realer TimeOffice-Beispiele ermittelte Regel angepasst.
+- Telefonisch: Alle Telefonminuten eines Dienstes werden addiert und einmal auf die nächste volle Stunde aufgerundet.
+- Im Haus: Jeder einzelne Hauseinsatz wird separat auf die nächste volle Stunde aufgerundet; danach werden die gerundeten Hauseinsatz-Stunden addiert.
+- Gesamtstunden und optionale Vergütung verwenden dieselbe neue Rundungslogik.
+- Monatsübersicht, Dienst-Detailansicht, CSV und PDF-Bericht wurden entsprechend angepasst.
+- Die zuvor vorbereitete, aber nicht veröffentlichte Geräte-Statistik aus Version 7.32 ist nicht enthalten.
+
+
+## Version 7.34
+- Jeder einzelne Einsatz vom Typ „Im Haus“ zeigt in der Detailübersicht zusätzlich direkt seine gerundete Einsatzzeit.
+- Beispiel: 70 Min. → 2 Stunden gerundet.
+- Telefonische Einträge bleiben unverändert.
+- Die Summenkacheln oben bleiben unverändert und verwenden weiterhin die bestehende Gesamtberechnung.
