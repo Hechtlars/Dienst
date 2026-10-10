@@ -640,3 +640,10 @@ dialog.action-sheet-open button {
 #patientPhotoCrop .pp-stage{
   position:relative;
 }
+
+/* Vergütungsdetails und mobile Abrechnung */
+.entry-pay{margin-top:8px;font-size:14px;font-weight:650;color:#17496e}
+.entry-pay small{display:block;font-size:11px;font-weight:400;line-height:1.5;color:#596571}
+.pay-detail-card .row{align-items:flex-start;gap:12px}.pay-detail-card .row-title{white-space:normal}
+.pay-detail-card .row-value{flex-shrink:0}.pay-detail-card .small-note{padding:10px 14px}
+@media(max-width:420px){.pay-detail-card .row-title{font-size:13px}.pay-detail-card .row-value{font-size:14px}}

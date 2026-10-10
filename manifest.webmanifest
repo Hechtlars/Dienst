@@ -1,7 +1,7 @@
 {
   "name": "Dienst",
   "short_name": "Dienst",
-  "description": "Lokale Erfassung von Einsätzen im 24-Stunden-Bereitschaftsdienst.",
+  "description": "Lokale Erfassung von Einsätzen im 24-Stunden-Rufbereitschaft.",
   "lang": "de-DE",
   "start_url": "./",
   "scope": "./",

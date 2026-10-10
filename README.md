@@ -1,4 +1,59 @@
-# Dienst – Version 6
+# Dienst – Version 7.38
+
+Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
+
+## GitHub Pages aktualisieren
+
+1. Vor dem Update in der bisherigen App eine Sicherung exportieren.
+2. ZIP entpacken. Die Dateien aus dem ZIP direkt im bisherigen GitHub-Pages-Verzeichnis ersetzen. Die ZIP selbst ist keine Website.
+3. Die bisherige URL weiterverwenden. Persönliche Browserdaten bleiben an diese Adresse gebunden.
+4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.38.
+
+Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
+
+## Änderungen
+
+- Bestehende Vergütungsengine erweitert: historische Zuschlagsfenster, Zuschlagskonkurrenz, RB-Staffelung, kurze RB unter zwölf Stunden, Einzelbeträge und Brutto-Soll-Ist-Abgleich.
+- Feiertagskorrektur des Nutzers: mit Freizeitausgleich, 35 %. Bestehende Tarifperioden werden einmalig entsprechend korrigiert, ihre Stundenwerte bleiben erhalten.
+- Bestätigtes Profil: Entgeltgruppe II, Stufe 1. Fehlender Zeitraum ab März 2026 wird bei den bisherigen Standardsätzen mit 50,96 Euro Einsatzstundenwert, 43,42 Euro Pauschalenbasis und 50,26 Euro Zuschlagsbasis ergänzt. Bereits gespeicherte neuere Tarifperioden werden nicht überschrieben.
+- Referenzvorschläge NRW berücksichtigen den ersten Tabellenanstieg erst ab November 2025, anschließend Dezember 2025 und März 2026.
+- Telefonzeiten pro Dienst gemeinsam aufgerundet; Hauseinsätze einzeln. Einzelbeträge bei Telefonaten sind ausdrücklich Anteile am gemeinsamen Telefonpool.
+- RB-Kernnacht: eigene Mindestrundung unter einer Stunde; Zusatz AiRB und zusätzliche Zeitanteile entsprechend den Lohnartengruppen getrennt dargestellt.
+- Gehaltsvergleich speichert Leistungsmonat und Auszahlungsmonat getrennt; Auszahlungsvorschlag Folgemonat. Istwerte werden lokal gespeichert und mitgesichert.
+- Alte Dienstzeiten bei Migration eingefroren; spätere Einstellungen wirken als Vorgabe für neue Dienste. Dienstgrenzen sind individuell bearbeitbar.
+- PDF-Bericht enthält Vergütungsdetails und lokale Patienten-ID-Ausschnitte; CSV enthält Einzelbeträge und Status.
+- Veralteter Kamera-Aufruf beim Schließen des Dialogs repariert, Kamerastream und vollständiges temporäres Foto werden beim Schließen verworfen.
+- Cache-Version aktualisiert, fremde Cache-Namen werden beim Update erhalten. Speicherausfälle werden sichtbar gemeldet.
+
+## Transparenz der Berechnung
+
+Alle Zahlen sind Bruttowerte. Die App prüft Rufbereitschaftspositionen, nicht das gesamte Nettogehalt. Keine Bereitschaftsdienstbewertung nach § 8.
+
+Die RB-Staffelung braucht den Beschäftigungsumfang und einen als vollständig bestätigten Leistungsmonat. Ungeklärte Staffelzuschläge werden nicht addiert. Normale Grenze: 13 RB, danach 10 %, weitere drei RB jeweils weitere 10 Prozentpunkte; bei Teilzeit wird die Grenze entsprechend angepasst.
+
+Dienste über 24 Stunden werden nicht automatisch in mehrere tarifliche RB umgedeutet. Ihre Starttagspauschale bleibt ein ausdrücklich vorläufiger Vergleichswert; die Staffelung ist bei ungeklärter Zählung ausgesetzt. Das betrifft insbesondere die bisherige Freitagsvorgabe von 25 Stunden 15 Minuten.
+
+Bei fehlender historischer Zuschlagsbasis, ungeklärtem Profil, Tarifwechsel innerhalb eines Dienstes und Zeiträumen ab 2027 erscheint eine Begründung. Fehlende Zuschlagsbeträge werden nicht als gesicherte Ansprüche ausgegeben. Zuschläge wegen verspäteter Planung, kurzfristiger Planänderung oder fehlender freier Wochenenden sind ohne Nachweise nicht automatisch enthalten.
+
+Angezeigte Abrechnungsstunden und Stundensätze können intern genauer sein. Der geprüfte Feiertagsbetrag von 108,53 Euro weicht bei Rechnung mit den angezeigten Werten um einen Cent ab. Eine exakte Reproduktion der internen Abrechnungsrundung ist nicht bestätigt. Der Istwert wird nicht künstlich an den Sollwert angepasst.
+
+## Tests und Grenzen
+
+53 automatisierte Prüfungen bestanden: Tarif-, Berechnungs-, Migrationstests und Funktionsprüfungen der Formularhandler im Node-DOM-Testhost. JavaScript-Syntax, lokale Asset-Verweise und ZIP-Struktur geprüft. Ergebnisse in tests/core-results.json.
+
+**Keine vollständige Browserfreigabe:** Chromium-/WebKit-Browserprüfungen konnten in dieser Umgebung nicht ausgeführt werden. Mobiles Layout, Kamera-Hardware, Service-Worker-Update, echtes Offline-Verhalten und Druckdialog sind deshalb nicht abschließend getestet. Ein Browser-Testskript liegt in tests/run.cjs bei; es ist nicht als bestanden ausgewiesen. Vor produktiver Nutzung müssen diese Prüfungen auf dem Zielgerät erfolgen.
+
+Berechnungstests vom entpackten Projektstamm: `node tests/core.cjs`. Browsertests benötigen Node und Playwright: `npm install --no-save playwright`, `npx playwright install chromium webkit`, Projekt per `python3 -m http.server 8765` bereitstellen, dann `node tests/run.cjs`.
+
+## Tarifquellen (geprüft Oktober 2026)
+
+- Bundeskommission, 5. Juni 2025: https://caritas-dienstgeber.de/fileadmin/Beschluesse/BK/01_BK_2025-02_Beschluss_Tarifrunde_AErzte_2024_bis_2026_gezeichnet.pdf
+- NRW-Umsetzung: https://www.akmas.de/tarif/tarifrunde-aerzte-2024/rk-nrw-einigung-in-der-tarifrunde-f%C3%BCr-%C3%A4rztinnen-und-%C3%A4rzte.html
+- Kirchliches Amtsblatt Essen 9/2022, RB-Staffel/Kernnacht: https://www.bistum-essen.de/fileadmin/relaunch/Bilder/Service/Amtsblatt_2022/Kirchliches_Amtsblatt_Essen_9_2022.pdf
+- Anlage 30, frühere Grundregeln: https://www.diag-mav-freiburg.de/media/download/variant/831047/
+
+
+# Frühere Versionshistorie
 
 Progressive Web App zur lokalen Erfassung von Bereitschaftsdiensten.
 
@@ -302,3 +357,11 @@ Es gibt keine OCR, keine Ziffernerkennung, kein Tesseract, kein PaddleOCR und ke
 - Beispiel: 70 Min. → 2 Stunden gerundet.
 - Telefonische Einträge bleiben unverändert.
 - Die Summenkacheln oben bleiben unverändert und verwenden weiterhin die bestehende Gesamtberechnung.
+
+
+## Version 7.36 – Zwischenstand, nicht produktiv freigegeben
+Tarifperiodenbezogene Speicherung des Feiertags-Freizeitausgleichs; keine stillschweigende Verwendung aktueller Zuschlagsgrundlagen für historische Dienste. Fehlende historische Parameter werden als ungeklärt angezeigt. Die vollständige Abrechnungsprüfung ist noch offen.
+
+
+## Arbeitsstand 7.37
+Gehaltsabrechnungsabgleich für Leistungsmonat mit getrenntem Abrechnungsmonat und lokaler Speicherung ergänzt. Noch keine Freigabe: Tarifstaffelung, Zuschlagsgrundlage und Gesamttests offen.

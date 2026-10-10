@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.34';
+const APP_VERSION = '7.38';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -60,18 +60,41 @@ backupReminderDismiss.addEventListener('click', () => {
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return parsed && Array.isArray(parsed.duties) ? { ...parsed, settings: normalizeSettings(parsed.settings) } : { duties: [], settings: normalizeSettings() };
+    return parsed && Array.isArray(parsed.duties) ? migrateState(parsed) : { duties: [], settings: normalizeSettings() };
   } catch {
     return { duties: [], settings: normalizeSettings() };
   }
 }
+function migrateState(data) {
+  const settings=normalizeSettings(data.settings);
+  return {...data,settings,duties:data.duties.map(duty=>{
+    const day=parseLocalDate(duty.date).getDay();
+    const schedule=settings.showCustomDutyTimes?settings.dutyTimes[day]:DEFAULT_DUTY_TIMES[day];
+    return {...duty,schedule:duty.schedule || {...schedule}};
+  })};
+}
 function normalizeSettings(settings = {}) {
+  settings = settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
   const workHourlyRate = Number.isFinite(Number(settings.workHourlyRate)) ? Number(settings.workHourlyRate) : 50.96;
   const allowanceHourlyRate = Number.isFinite(Number(settings.allowanceHourlyRate)) ? Number(settings.allowanceHourlyRate) : 43.42;
   let rateHistory = Array.isArray(settings.rateHistory) ? settings.rateHistory
     .filter(item => item && /^\d{4}-\d{2}-\d{2}$/.test(item.validFrom) && Number.isFinite(Number(item.workHourlyRate)) && Number.isFinite(Number(item.allowanceHourlyRate)))
-    .map(item => ({ validFrom: item.validFrom, workHourlyRate: Number(item.workHourlyRate), allowanceHourlyRate: Number(item.allowanceHourlyRate) })) : [];
+    .map(item => ({ ...item, validFrom: item.validFrom, workHourlyRate: Number(item.workHourlyRate), allowanceHourlyRate: Number(item.allowanceHourlyRate) })) : [];
   if (!rateHistory.length) rateHistory = [{ validFrom: '1900-01-01', workHourlyRate, allowanceHourlyRate }];
+  // Nutzerkorrektur 10.10.2026: Feiertagsarbeit erfolgt MIT Freizeitausgleich.
+  // Einmalige Migration; Stundenwerte, Gültigkeitsdaten und andere Tarifdaten bleiben erhalten.
+  const applyHolidayCorrection = settings.holidayRuleVersion !== 2;
+  if (applyHolidayCorrection) rateHistory = rateHistory.map(item => ({...item, holidayTimeOff:'yes'}));
+  // Abrechnung Mai/Juni 2026 bestätigt II/1 und diese drei Stundenwerte.
+  // Nur eine fehlende Periode ergänzen; vorhandene Tarifhistorie niemals ersetzen.
+  if (settings.tariffProfileVersion !== 1 && !rateHistory.some(item => item.validFrom >= '2026-03-01')) {
+    const prior=rateHistory.at(-1);
+    if(prior.workHourlyRate===50.96 && prior.allowanceHourlyRate===43.42) {
+      rateHistory.push({validFrom:'2026-03-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,
+        supplementBaseRate:50.26,holidayTimeOff:'yes',tariffGroup:'II',ratesConfirmed:true,
+        source:'Gehaltsabrechnung bestätigt, Stufe 1'});
+    }
+  }
   rateHistory.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
   const latest = rateHistory[rateHistory.length - 1];
   const dutyTimes = {};
@@ -82,17 +105,26 @@ function normalizeSettings(settings = {}) {
     dutyTimes[day] = { start: validStart, end: validEnd };
   }
   return {
+    ...settings,
+    holidayRuleVersion: 2,
+    tariffProfileVersion: 1,
+    tariffGroup: ['I','II'].includes(settings.tariffGroup) ? settings.tariffGroup : 'II',
+    employmentFraction: Number(settings.employmentFraction)>0 && Number(settings.employmentFraction)<=1 ? Number(settings.employmentFraction) : null,
     showPay: Boolean(settings.showPay),
     showTimeline: Boolean(settings.showTimeline),
     showCustomDutyTimes: Boolean(settings.showCustomDutyTimes),
     dutyTimes,
     workHourlyRate: latest.workHourlyRate,
     allowanceHourlyRate: latest.allowanceHourlyRate,
-    rateHistory
+    rateHistory,
+    supplementBaseRate: Number(latest.supplementBaseRate) > 0 ? Number(latest.supplementBaseRate) : null,
+    holidayTimeOff: applyHolidayCorrection ? 'yes' : ['yes','no','unknown'].includes(settings.holidayTimeOff) ? settings.holidayTimeOff : 'yes',
+    payroll: settings.payroll && typeof settings.payroll === 'object' && !Array.isArray(settings.payroll) ? settings.payroll : {}
   };
 }
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(error) { alert('Speichern fehlgeschlagen: Der lokale Speicher ist voll oder nicht verfügbar. Exportiere sofort eine Sicherung; die zuletzt eingegebenen Daten sind nur in dieser geöffneten App vorhanden.'); throw error; }
   showBackupReminder();
 }
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }
@@ -114,14 +146,16 @@ function dutySchedule(dateKey) {
   return { startHour: start.hour, startMinute: start.minute, endHour: end.hour, endMinute: end.minute };
 }
 function dutyStart(duty) {
+  if(duty.startOverride) return new Date(duty.startOverride);
   const date = parseLocalDate(duty.date);
-  const schedule = dutySchedule(duty.date);
+  const schedule = duty.schedule ? {startHour:timeParts(duty.schedule.start).hour,startMinute:timeParts(duty.schedule.start).minute} : dutySchedule(duty.date);
   date.setHours(schedule.startHour, schedule.startMinute, 0, 0);
   return date;
 }
 function dutyEnd(duty) {
+  if(duty.endOverride) return new Date(duty.endOverride);
   const date = parseLocalDate(duty.date);
-  const schedule = dutySchedule(duty.date);
+  const schedule = duty.schedule ? {endHour:timeParts(duty.schedule.end).hour,endMinute:timeParts(duty.schedule.end).minute} : dutySchedule(duty.date);
   date.setDate(date.getDate() + 1);
   date.setHours(schedule.endHour, schedule.endMinute, 0, 0);
   return date;
@@ -234,22 +268,216 @@ function houseRoundedHours(duty) {
 function hourLabel(value) { return `${value} ${value === 1 ? 'Stunde' : 'Stunden'}`; }
 function fmtMoney(value) { return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value); }
 function dutyRoundedHours(duty) { return phoneRoundedHours(duty) + houseRoundedHours(duty); }
-function dutyAllowanceMultiplier(duty) { const day = parseLocalDate(duty.date).getDay(); return day === 0 || day === 6 ? 4 : 2; }
+function easterSunday(year) { const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k+7)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(year,Math.floor(n/31)-1,n%31+1); }
+function isNrwHoliday(date) { const key=localDateKey(date);if(['01-01','05-01','10-03','11-01','12-25','12-26'].includes(key.slice(5)))return true;const e=easterSunday(date.getFullYear());return [-2,1,39,50,60].some(n=>localDateKey(new Date(e.getFullYear(),e.getMonth(),e.getDate()+n))===key); }
+function dutyAllowanceMultiplier(duty) { const date=parseLocalDate(duty.date),day=date.getDay(); return day===0||day===6||isNrwHoliday(date)?4:2; }
 function ratesForDuty(duty) {
   const settings = state.settings || normalizeSettings();
   const history = Array.isArray(settings.rateHistory) && settings.rateHistory.length ? settings.rateHistory : [{ validFrom: '1900-01-01', workHourlyRate: settings.workHourlyRate, allowanceHourlyRate: settings.allowanceHourlyRate }];
-  const applicable = history.filter(item => item.validFrom <= duty.date).sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0] || history[0];
-  return applicable;
+  const applicable = history.filter(item => item.validFrom <= duty.date).sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
+  return applicable || { validFrom: duty.date, workHourlyRate: 0, allowanceHourlyRate: 0, missing: true };
 }
-function dutyPay(duty) {
-  const rates = ratesForDuty(duty);
-  const hours = dutyRoundedHours(duty);
-  const hoursPay = hours * rates.workHourlyRate;
-  const multiplier = dutyAllowanceMultiplier(duty);
-  const allowance = multiplier * rates.allowanceHourlyRate;
-  return { hours, hoursPay, multiplier, allowance, total: hoursPay + allowance, rates };
+// Eine einzige Engine für Übersicht, Einzelvergütung, Export und Abgleich.
+// Referenzwerte NRW, Stufe 1; keine automatische Überschreibung lokaler Historie.
+const TARIFF_REFERENCE = [
+  {validFrom:'2025-11-01', I:[5499.85,6034.28], II:[7258.93,8401.96]},
+  {validFrom:'2025-12-01', I:[5609.85,6154.97], II:[7404.11,8570.00]},
+  {validFrom:'2026-03-01', I:[5722.05,6278.07], II:[7552.19,8741.40]}
+];
+function referenceRates(date, group) {
+  const period=TARIFF_REFERENCE.filter(p=>p.validFrom<=date).at(-1);
+  if(!period || !period[group] || date>'2026-12-31') return null;
+  const [individual,stage3]=period[group], divisor=40*4.348;
+  const base=stage3/divisor, allowance=individual/divisor;
+  return {workHourlyRate: allowance+base*.15, allowanceHourlyRate:allowance, supplementBaseRate:base};
 }
-function monthPay(duties) { return duties.reduce((total, duty) => total + dutyPay(duty).total, 0); }
+function cents(value) { return Math.round((value+Number.EPSILON)*100)/100; }
+function eachWorkMinute(duty, callback) {
+  for(const entry of duty.entries || []) {
+    const start=new Date(entry.start).getTime(), end=new Date(entry.end).getTime();
+    if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start) continue;
+    for(let t=start;t<end;) {
+      const next=Math.min(end,Math.floor(t/60000)*60000+60000);
+      callback(new Date(t),(next-t)/60000,entry);
+      t=next;
+    }
+  }
+}
+function minuteRules(d) {
+  const modern=localDateKey(d)>='2025-10-01', clock=d.getHours()*60+d.getMinutes();
+  return {night:clock>=(modern?1200:1260)||clock<360, nightRate:modern?.20:.15,
+    midnight:clock<360 && localDateKey(d)>='2022-07-01',
+    saturday:d.getDay()===6&&clock>=780&&clock<(modern?1200:1260), modern,
+    sunday:d.getDay()===0, holiday:isNrwHoliday(d),
+    specialDecember:d.getMonth()===11&&[24,31].includes(d.getDate())&&clock>=360};
+}
+function actualMinuteBuckets(duty) {
+  const buckets={actual:0,night:0,midnight:0,saturday:0,sunday:0,holiday:0,specialDecember:0};
+  eachWorkMinute(duty,(d,m)=>{const rules=minuteRules(d);buckets.actual+=m;
+    for(const key of Object.keys(buckets)) if(key!=='actual'&&rules[key]) buckets[key]+=m;
+  });
+  return buckets;
+}
+function rbTier(duty, context=state.duties) {
+  const month=duty.date.slice(0,7), saved=state.settings.payroll[month]||{};
+  const list=context.filter(d=>d.date.slice(0,7)===month).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const ordinal=list.findIndex(d=>d.id===duty.id)+1;
+  const fraction=ratesForDuty(duty).employmentFraction || state.settings.employmentFraction;
+  const threshold=fraction ? Math.round(13*fraction) : 13;
+  const percentage=duty.date>='2022-07-01'&&ordinal>threshold ? .10*(1+Math.floor((ordinal-threshold-1)/3)) : 0;
+  const reasons=[];
+  if(!fraction) reasons.push('Beschäftigungsumfang für RB-Staffelung ungeklärt');
+  if(!saved.complete) reasons.push('Monat für RB-Staffelung noch nicht als vollständig bestätigt');
+  if(list.some(d=>(dutyEnd(d)-dutyStart(d))/3600000>24)) reasons.push('Dienst über 24 Stunden: tarifliche Anzahl der Rufbereitschaften ungeklärt');
+  return {ordinal,threshold,percentage,confirmed:!reasons.length,reasons};
+}
+function dutyPay(duty, context=state.duties) {
+  const rates=ratesForDuty(duty), hours=dutyRoundedHours(duty), buckets=actualMinuteBuckets(duty);
+  const reasons=[], entryDetails=(duty.entries||[]).map(entry=>({id:entry.id,type:entry.type,
+    hours:entry.type==='Im Haus'?roundedHours(minutes(entry)):sum(duty,'Telefonisch')?phoneRoundedHours(duty)*minutes(entry)/sum(duty,'Telefonisch'):0,
+    hoursPay:0,supplements:{night:0,saturday:0,sunday:0,holiday:0,specialDecember:0},specialRB:0,rbTimeExtras:0,tierPay:0,total:0}));
+  const detailsById=new Map(entryDetails.map(e=>[e.id,e]));
+  const supplements={night:0,saturday:0,sunday:0,holiday:0,specialDecember:0};
+  const midnightByEntry=new Map(), workPeriods=new Map();
+  eachWorkMinute(duty,(d,m,entry)=>{
+    const r=ratesForDuty({date:localDateKey(d)}), rules=minuteRules(d), detail=detailsById.get(entry.id);
+    if(r.missing) reasons.push('Historischer Stundenwert fehlt');
+    if(!r.ratesConfirmed) reasons.push('Gespeicherte Stundenwerte / Eingruppierung noch nicht bestätigt');
+    if(localDateKey(d)>'2026-12-31') reasons.push('Tarifstand ab 2027 noch nicht verifiziert');
+    const periodKey=entry.id+'|'+r.validFrom;
+    const period=workPeriods.get(periodKey)||{detail,minutes:0,rate:r.workHourlyRate};period.minutes+=m;workPeriods.set(periodKey,period);
+    const base=Number(r.supplementBaseRate)>0?Number(r.supplementBaseRate):null;
+    const timeOff=r.holidayTimeOff==='no'?'no':r.holidayTimeOff==='unknown'?'unknown':'yes';
+    const part={night:0,saturday:0,sunday:0,holiday:0,specialDecember:0};
+    if(base && rules.night) part.night=m/60*base*rules.nightRate;
+    if(!base&&(rules.night||rules.sunday||rules.holiday||rules.specialDecember||(rules.saturday&&rules.modern))) reasons.push('Historische Bemessungsgrundlage der Zeitzuschläge fehlt');
+    const candidates=[];
+    if(rules.saturday) candidates.push(['saturday',rules.modern?(base||0)*.20:.64]);
+    if(rules.sunday) candidates.push(['sunday',(base||0)*.25]);
+    if(rules.holiday) {
+      if(timeOff==='unknown') { reasons.push('Feiertags-Freizeitausgleich ungeklärt'); candidates.length=0; }
+      else candidates.push(['holiday',(base||0)*(timeOff==='yes'?.35:1.35)]);
+    }
+    if(rules.specialDecember && !(rules.holiday&&timeOff==='unknown')) candidates.push(['specialDecember',(base||0)*.35]);
+    if(candidates.length) {const [kind,value]=candidates.reduce((a,b)=>b[1]>a[1]?b:a);part[kind]+=m/60*value;}
+    for(const key of Object.keys(part)){detail.supplements[key]+=part[key];supplements[key]+=part[key];}
+    if(rules.midnight) {
+      const item=midnightByEntry.get(entry.id)||{minutes:0,work:0,extras:0};
+      item.minutes+=m;item.work+=m/60*r.workHourlyRate;item.extras+=Object.values(part).reduce((a,b)=>a+b,0);midnightByEntry.set(entry.id,item);
+    }
+  });
+  // Rundungsstunden werden bei Tarifwechsel anteilig nach echten Einsatzminuten verteilt.
+  // Diese Aufteilung ist bei Grenzfällen vorläufig und wird ausdrücklich gekennzeichnet.
+  for(const period of workPeriods.values()) {
+    const entry=duty.entries.find(e=>e.id===period.detail.id), duration=(new Date(entry.end)-new Date(entry.start))/60000;
+    period.detail.hoursPay+=duration>0?period.detail.hours*period.minutes/duration*period.rate:0;
+  }
+  if(new Set([...workPeriods.values()].map(p=>p.rate)).size>1) reasons.push('Tarifwechsel innerhalb eines Dienstes: Aufteilung der Rundungsstunden vorläufig');
+  const hoursPay=entryDetails.reduce((a,e)=>a+e.hoursPay,0), multiplier=dutyAllowanceMultiplier(duty);
+  const duration=(dutyEnd(duty)-dutyStart(duty))/3600000;
+  const allowanceFactor=duration<12?Math.ceil(duration)*.125:multiplier;
+  const allowance=allowanceFactor*rates.allowanceHourlyRate;
+  if(rates.missing) reasons.push('Historischer Pauschalenwert fehlt');
+  if(!rates.ratesConfirmed) reasons.push('Gespeicherte Stundenwerte / Eingruppierung noch nicht bestätigt');
+  if(duration>24) reasons.push('Dienst über 24 Stunden: Pauschalenanzahl ungeklärt; bisherige Starttagspauschale als Vergleichswert');
+  if(duty.date>'2026-12-31') reasons.push('Tarifstand ab 2027 noch nicht verifiziert');
+  const midnightRatedMinutes=buckets.midnight>0?Math.max(60,buckets.midnight):0;
+  // Sonderrundung nur für Überstundenentgelt; Zeitzuschlagszeiten bleiben tatsächlich.
+  // 50 % umfasst Überstundenentgelt UND die darauf entfallenden Zeitzuschläge.
+  const midnightScale=buckets.midnight>0?midnightRatedMinutes/buckets.midnight:0;
+  let specialRB=0;
+  for(const detail of entryDetails) {
+    const night=midnightByEntry.get(detail.id);
+    if(night) detail.specialRB=.5*night.work*midnightScale;
+    specialRB+=detail.specialRB;
+  }
+  // Lohnarten der geprüften Abrechnung: Zusatz AiRB (2029) führt den
+  // 50%-Überstundenanteil; 50%-Zeitanteile bleiben bei Nacht/Sonntag/Feiertag.
+  const specialRBSupplements={night:0,saturday:0,sunday:0,holiday:0,specialDecember:0};
+  eachWorkMinute(duty,(d,m,entry)=>{
+    if(!minuteRules(d).midnight)return;
+    const r=ratesForDuty({date:localDateKey(d)}), base=Number(r.supplementBaseRate)>0?Number(r.supplementBaseRate):0;
+    const rules=minuteRules(d), detail=detailsById.get(entry.id), candidates=[];
+    if(base){const value=m/60*base*rules.nightRate*.5;detail.supplements.night+=value;detail.rbTimeExtras+=value;supplements.night+=value;specialRBSupplements.night+=value;}
+    if(rules.sunday && !(rules.holiday && r.holidayTimeOff==='unknown'))candidates.push(['sunday',base*.25]);
+    if(rules.holiday && r.holidayTimeOff!=='unknown')candidates.push(['holiday',base*(r.holidayTimeOff==='no'?1.35:.35)]);
+    if(candidates.length){const [kind,rate]=candidates.reduce((a,b)=>b[1]>a[1]?b:a);const value=m/60*rate*.5;detail.supplements[kind]+=value;detail.rbTimeExtras+=value;supplements[kind]+=value;specialRBSupplements[kind]+=value;}
+  });
+  const extra=Object.values(supplements).reduce((a,b)=>a+b,0), tier=rbTier(duty,context);
+  if(tier.percentage) reasons.push(...tier.reasons);
+  const tierBasis=allowance+hoursPay+extra-Object.values(specialRBSupplements).reduce((a,b)=>a+b,0);
+  const tierPay=tier.confirmed?tier.percentage*tierBasis:0;
+  for(const detail of entryDetails) {
+    const extras=Object.values(detail.supplements).reduce((a,b)=>a+b,0);
+    detail.tierPay=tier.confirmed?tier.percentage*(detail.hoursPay+extras-detail.rbTimeExtras):0;
+    detail.total=detail.hoursPay+extras+detail.specialRB+detail.tierPay;
+  }
+  const incompleteReasons=[...new Set(reasons)], total=hoursPay+allowance+specialRB+extra+tierPay;
+  return {hours,hoursPay,multiplier:allowanceFactor,allowance,total,rates,buckets,midnightRatedMinutes,specialRB,specialRBSupplements,supplements,tier,tierPay,entryDetails,
+    incomplete:incompleteReasons.length>0,incompleteReasons};
+}
+function monthPay(duties) { return monthPayDetails(duties).total; }
+function monthPayDetails(duties) {
+  const result={actual:0,hours:0,hoursPay:0,allowance:0,specialRB:0,tierPay:0,total:0,incomplete:false,incompleteReasons:[],
+    supplements:{night:0,saturday:0,sunday:0,holiday:0,specialDecember:0}};
+  for(const duty of duties){const p=dutyPay(duty);result.actual+=p.buckets.actual;result.hours+=p.hours;
+    for(const key of ['hoursPay','allowance','specialRB','tierPay']) result[key]+=p[key];
+    for(const key of Object.keys(result.supplements)) result.supplements[key]+=p.supplements[key];
+    result.incomplete ||= p.incomplete; result.incompleteReasons.push(...p.incompleteReasons);
+  }
+  for(const key of ['hoursPay','allowance','specialRB','tierPay']) result[key]=cents(result[key]);
+  for(const key of Object.keys(result.supplements)) result.supplements[key]=cents(result.supplements[key]);
+  result.total=cents(result.hoursPay+result.allowance+result.specialRB+result.tierPay+Object.values(result.supplements).reduce((a,b)=>a+b,0));
+  result.incompleteReasons=[...new Set(result.incompleteReasons)];return result;
+}
+// Soll-Ist-Abgleich basiert ausschließlich auf monthPayDetails / dutyPay.
+function payrollRows(monthDutiesList) {
+  const m = monthPayDetails(monthDutiesList);
+  return [
+    ['hours', 'Vergütete Einsatzstunden', m.hours, 'h'],
+    ['hoursPay', 'Einsatzvergütung', m.hoursPay, '€'],
+    ['allowance', 'Rufbereitschaftspauschalen', m.allowance, '€'],
+    ['night', 'Nachtzuschlag', m.supplements.night, '€'],
+    ['specialRB', 'RB-Zuschlag 00–06', m.specialRB, '€'],
+    ['tierPay', 'RB-Staffelzuschlag', m.tierPay, '€'],
+    ['saturday', 'Samstag', m.supplements.saturday, '€'],
+    ['sunday', 'Sonntag', m.supplements.sunday, '€'],
+    ['holiday', 'Feiertag', m.supplements.holiday, '€'],
+    ['specialDecember', '24./31. Dezember', m.supplements.specialDecember, '€'],
+    ['total', 'Gesamt (berechenbare Positionen)', m.total, '€']
+  ];
+}
+function payrollMonthKey(month) { return `${month.getFullYear()}-${pad(month.getMonth()+1)}`; }
+function payrollDefaultPaymentMonth(month) { return payrollMonthKey(new Date(month.getFullYear(),month.getMonth()+1,1)); }
+function openPayrollComparison() {
+  const key = payrollMonthKey(selectedMonth), saved = state.settings.payroll[key] || {};
+  const details = monthPayDetails(monthDuties());
+  const rows = payrollRows(monthDuties());
+  const euros = value => Number(value).toLocaleString('de-DE', {minimumFractionDigits:2,maximumFractionDigits:2});
+  modalContent.innerHTML = `<div class="modal-body"><div class="modal-title">Gehaltsabrechnung prüfen</div>
+    <div class="small-note">Leistungsmonat: ${fmtMonth(selectedMonth)}. Tatsächlich ausgezahlte Werte manuell eintragen. Ungeklärte Zuschläge bleiben vorläufig.</div>
+    <div class="small-note"><strong>${details.incomplete ? 'Vorläufiger Vergleich – keine vollständige Anspruchsbestätigung' : 'Vergleich der erfassten RB-Bruttopositionen'}</strong>${details.incomplete ? ': '+escapeHtml(details.incompleteReasons.join('; ')) : ''}</div><label class="field"><span>Abrechnungsmonat</span><input id="payrollPaymentMonth" type="month" value="${escapeHtml(saved.paymentMonth || payrollDefaultPaymentMonth(selectedMonth))}"></label>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th>Position</th><th>App</th><th>Abrechnung</th><th>Differenz</th></tr></thead><tbody>
+    ${rows.map(([id,label,expected,unit])=>`<tr><td>${label}</td><td>${unit==='€'?euros(expected):expected} ${unit}</td><td><input style="width:90px" type="number" inputmode="decimal" step="${unit==='€'?'0.01':'1'}" data-payroll="${id}" value="${escapeHtml(saved.values?.[id]??'')}" placeholder="–"></td><td data-difference="${id}">?</td></tr>`).join('')}
+    </tbody></table></div><div class="small-note">Differenz = Gehaltsabrechnung minus App. Die App zeigt nur die derzeit berechenbaren Ansprüche; bei fehlenden Tarifgrundlagen ist das Ergebnis vorläufig.</div>
+    <label class="settings-toggle-row"><span>Alle Rufbereitschaften dieses Leistungsmonats erfasst (für Staffelung)</span><input type="checkbox" id="payrollComplete" ${saved.complete?'checked':''}></label><div class="small-note">Brutto mit Brutto vergleichen. Fehlende Istwerte bleiben ungeprüft. Abweichende Lohnarten oder Nachzahlungen separat zuordnen.</div><div class="modal-actions"><button type="button" class="primary" id="savePayroll">Speichern</button><button type="button" class="secondary-button" id="closePayroll">Schließen</button></div></div>`;
+  modal.showModal();
+  const refresh = () => rows.forEach(([id,,expected,unit])=>{
+    const el = modalContent.querySelector(`[data-payroll="${id}"]`), cell=modalContent.querySelector(`[data-difference="${id}"]`);
+    if (!el.value.trim()) {cell.textContent='?';return;}
+    const delta=Number(el.value)-expected;
+    if (!Number.isFinite(delta)) {cell.textContent='Ungültig';return;}
+    cell.textContent=`${Math.abs(delta)<(unit==='€'?.005:.001)?(details.incomplete?'≈':'✓'):'⚠'} ${unit==='€'?euros(delta):delta.toFixed(1)} ${unit}`;
+    cell.title=`App-Sollwert: ${unit==='€'?euros(expected):expected} ${unit}; Istwert: ${el.value} ${unit}`;
+  });
+  modalContent.querySelectorAll('[data-payroll]').forEach(el=>el.addEventListener('input',refresh));refresh();
+  document.getElementById('savePayroll').onclick=()=>{
+    const values={};modalContent.querySelectorAll('[data-payroll]').forEach(el=>{if(el.value.trim()!==''&&Number.isFinite(Number(el.value)))values[el.dataset.payroll]=Number(el.value);});
+    state.settings.payroll[key]={...saved,complete:document.getElementById('payrollComplete').checked,paymentMonth:document.getElementById('payrollPaymentMonth').value||payrollDefaultPaymentMonth(selectedMonth),values};
+    saveState();modal.close();render();
+  };
+  document.getElementById('closePayroll').onclick=()=>modal.close();
+}
 function sortedDuties() { return [...state.duties].sort((a, b) => dutyStart(b) - dutyStart(a)); }
 function activeDuty() { const now = new Date(); return sortedDuties().find(duty => dutyStart(duty) <= now && now < dutyEnd(duty)); }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
@@ -345,7 +573,7 @@ function refreshTimeSensitiveView(force = false) {
 
 function renderDuty() {
   title.textContent = 'Dienst';
-  subtitle.textContent = 'Bereitschaft erfassen';
+  subtitle.textContent = 'Rufbereitschaft erfassen';
   const duty = activeDuty();
   lastDutySignature = dutyViewSignature();
   if (!duty) {
@@ -365,7 +593,7 @@ function renderDuty() {
   const houseMinutes = sum(duty, 'Im Haus');
   main.innerHTML = `
     <section class="card hero">
-      <div class="hero-kicker">Aktueller Bereitschaftsdienst</div>
+      <div class="hero-kicker">Aktuelle Rufbereitschaft</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
       <div class="hero-time">${dutyTimeText(duty)}</div>
       ${timelineHtml(duty)}
@@ -373,11 +601,12 @@ function renderDuty() {
     <button class="action-button duty-edit-button" id="editActiveDuty" type="button">Dienst bearbeiten</button>
     <section class="stats">
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
-      <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(houseMinutes))} gerundet</div></div>
+      <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(houseRoundedHours(duty))} gerundet</div></div>
     </section>
     <button class="primary" id="newEntry" type="button">+ Einsatz hinzufügen</button>
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
+    ${state.settings.showPay ? payDetailCard(duty) : ''}
     ${privacyNote()}`;
   document.getElementById('editActiveDuty').onclick = () => openEditDuty(duty.id);
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
@@ -412,10 +641,11 @@ function renderMonth() {
         <div class="month-stat-breakdown"><span>Telefonisch <strong>${totals.phoneHours} Std.</strong></span><span>Im Haus <strong>${totals.houseHours} Std.</strong></span></div>
       </div>
     </section>
-    ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div></section>` : ''}
+    ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div><div class="small-note">${(() => { const m=monthPayDetails(duties);return `${duties.length} Rufbereitschaften · ${m.actual.toFixed(0)} tatsächliche Minuten · ${m.hours} vergütete Stunden · Einsatzvergütung ${fmtMoney(m.hoursPay)} · Pauschalen ${fmtMoney(m.allowance)} · Nacht ${fmtMoney(m.supplements.night)} · Staffel ${fmtMoney(m.tierPay)} · RB 00–06 ${fmtMoney(m.specialRB)} · Samstag ${fmtMoney(m.supplements.saturday)} · Sonntag ${fmtMoney(m.supplements.sunday)} · Feiertag ${fmtMoney(m.supplements.holiday)} · 24./31.12. ${fmtMoney(m.supplements.specialDecember)}`; })()}</div>${monthPayDetails(duties).incomplete ? `<div class="small-note">Vorläufiger Vergleichswert: ${escapeHtml(monthPayDetails(duties).incompleteReasons.join('; '))}.</div>` : ''}</section>` : ''}
     <div class="month-actions">
       <button class="action-button" id="exportCsv" type="button">CSV exportieren</button>
       <button class="action-button" id="printReport" type="button">PDF-Bericht</button>
+      ${state.settings.showPay ? '<button class="action-button" id="payrollComparison" type="button">Gehaltsabrechnung prüfen</button>' : ''}
     </div>
     <div class="card-header">Dienste</div>
     <section class="swipe-list">${duties.length ? duties.map(duty => {
@@ -438,6 +668,7 @@ function renderMonth() {
   document.getElementById('nextMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1); renderMonth(); };
   document.getElementById('exportCsv').onclick = exportMonthCsv;
   document.getElementById('printReport').onclick = printMonthReport;
+  if (state.settings.showPay) document.getElementById('payrollComparison').onclick = openPayrollComparison;
   bindInteractiveDuties();
 }
 
@@ -455,7 +686,7 @@ function renderDutyDetail(id) {
   main.innerHTML = `
     <button class="text-button" id="backMonth" type="button">‹ Zurück zur Übersicht</button>
     <section class="card hero">
-      <div class="hero-kicker">Bereitschaftsdienst</div>
+      <div class="hero-kicker">Rufbereitschaft</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
       <div class="hero-time">${dutyTimeText(duty)}</div>
     </section>
@@ -482,20 +713,27 @@ function renderDutyDetail(id) {
 
 function payDetailCard(duty) {
   const pay = dutyPay(duty);
-  const settings = state.settings;
-  const dayText = pay.multiplier === 4 ? 'Samstag/Sonntag · 400 %' : 'Montag–Freitag · 200 %';
-  return `<div class="card-header">Vergütung</div>
-    <section class="card pay-detail-card">
-      <div class="row"><div class="row-main"><div class="row-title">Arbeit in RB</div><div class="row-subtitle">${pay.hours} Std. × ${fmtMoney(pay.rates.workHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.hoursPay)}</div></div>
-      <div class="row"><div class="row-main"><div class="row-title">Rufbereitschaft Pauschale</div><div class="row-subtitle">${dayText} von ${fmtMoney(pay.rates.allowanceHourlyRate)}</div></div><div class="row-value strong-value">${fmtMoney(pay.allowance)}</div></div>
-      <div class="row total-row"><div class="row-main"><div class="row-title">Gesamtvergütung</div><div class="row-subtitle">Pauschale + gerundete Arbeit in RB</div></div><div class="row-value total-value">${fmtMoney(pay.total)}</div></div>
-    </section>`;
+  const line = (label,value) => `<div class="row"><div class="row-main"><div class="row-title">${label}</div></div><div class="row-value strong-value">${fmtMoney(value)}</div></div>`;
+  return `<div class="card-header">Vergütung · Rufbereitschaft</div><section class="card pay-detail-card">
+    ${line('Einsatzvergütung · '+pay.hours+' Stunden',pay.hoursPay)}
+    ${line('RB-Pauschale · Faktor '+pay.multiplier,pay.allowance)}
+    ${line('Nachtzuschlag inkl. RB-Zeitanteil · Nachtminuten '+Math.round(pay.buckets.night),pay.supplements.night)}
+    ${line('Besonderer RB-Zuschlag 00–06 · '+pay.midnightRatedMinutes.toFixed(0)+' Bewertungsminuten',pay.specialRB)}
+    ${line('Samstag',pay.supplements.saturday)}${line('Sonntag',pay.supplements.sunday)}
+    ${line('Feiertag',pay.supplements.holiday)}${line('24./31. Dezember',pay.supplements.specialDecember)}
+    ${line('RB-Staffel · Nr. '+pay.tier.ordinal+' · '+Math.round(pay.tier.percentage*100)+' %'+(pay.tier.confirmed?'':' (ungeklärt / nicht addiert)'),pay.tierPay)}
+    ${line(pay.incomplete?'Gesamt · vorläufiger Vergleichswert':'Gesamt · erfasste RB-Bruttopositionen',pay.total)}
+    <div class="small-note">Pauschale und ihr Staffelanteil gehören zum Dienst. Telefonvergütung wird anteilig nach Minuten aufgeteilt; kein zusätzlicher Stundenanspruch pro Telefonat. Zeitzuschläge gelten für echte Zeiten. Hauseinsatzzeiten einschließlich erforderlicher Wegezeiten erfassen.</div>
+    <div class="small-note">Tatsächlich ${pay.buckets.actual.toFixed(0)} Min. · tariflich ${pay.hours} Std. · Rundungsgewinn ${(pay.hours*60-pay.buckets.actual).toFixed(0)} Min.</div>
+    ${pay.incomplete?`<div class="small-note"><strong>Vorläufig, nicht vollständig:</strong> ${escapeHtml(pay.incompleteReasons.join('; '))}. Fehlende Positionen sind nicht in der Summe enthalten.</div>`:''}
+  </section>`;
 }
 
 function entryRow(duty, entry, withDelete) {
   const start = new Date(entry.start);
   const end = new Date(entry.end);
   const badgeClass = entry.type === 'Telefonisch' ? 'type-phone' : 'type-house';
+  const entryPay=state.settings.showPay?dutyPay(duty).entryDetails.find(e=>e.id===entry.id):null;
   const endDateText = localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`;
   return `<div class="swipe-item entry-swipe-item" data-kind="entry" data-duty="${duty.id}" data-entry="${entry.id}">
     ${withDelete ? '<button class="swipe-delete-action" type="button" aria-label="Einsatz löschen">Löschen</button>' : ''}
@@ -506,6 +744,7 @@ function entryRow(duty, entry, withDelete) {
         ${entry.patientId ? `<div class="entry-note">Patienten-ID: ${escapeHtml(entry.patientId)}</div>` : ''}
         ${entry.patientIdPhoto ? `<button type="button" class="entry-photo-link" data-photo-duty="${escapeHtml(duty.id)}" data-photo-entry="${escapeHtml(entry.id)}">📷 Patienten-ID anzeigen</button>` : ''}
         ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
+        ${entryPay ? `<div class="entry-pay">${fmtMoney(entryPay.total)}${dutyPay(duty).incomplete?' · vorläufig':''}<small>Basis ${fmtMoney(entryPay.hoursPay)} · Zeit ${fmtMoney(Object.values(entryPay.supplements).reduce((a,b)=>a+b,0))} · RB 00–06 ${fmtMoney(entryPay.specialRB)} · Staffel ${fmtMoney(entryPay.tierPay)}${entry.type==='Telefonisch'?' · Anteil am Telefonpool':''}</small></div>`:''}
       </div>
       <div class="row-value">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</div>
       <span class="chevron">›</span>
@@ -676,6 +915,24 @@ function openEntryContextMenu(dutyId, entryId) {
   document.getElementById('contextDeleteEntry').onclick = () => { modal.close(); deleteEntryById(dutyId, entryId); };
 }
 
+function localDatetimeValue(date) { return localDateKey(date)+'T'+pad(date.getHours())+':'+pad(date.getMinutes()); }
+function dutyBoundsForm(duty) {
+  return `<label class="field"><span>Tatsächlicher Beginn</span><input id="actualDutyStart" type="datetime-local" value="${localDatetimeValue(dutyStart(duty))}"></label>
+    <label class="field"><span>Tatsächliches Ende</span><input id="actualDutyEnd" type="datetime-local" value="${localDatetimeValue(dutyEnd(duty))}"></label>
+    <div class="small-note">Unter 12 Stunden: stundenweise RB-Pauschale. Über 24 Stunden: tarifliche Pauschalenanzahl ungeklärt. Beim Hauseinsatz Wegezeiten in Start/Ende einschließen.</div>`;
+}
+function readDutyBounds(date,error) {
+  const start=new Date(document.getElementById('actualDutyStart').value), end=new Date(document.getElementById('actualDutyEnd').value);
+  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||localDateKey(start)!==date) {
+    error.textContent='Gültige Dienstgrenzen eingeben. Beginn muss am ausgewählten Datum liegen, Ende nach Beginn.';return null;
+  }
+  return {startOverride:start.toISOString(),endOverride:end.toISOString()};
+}
+function updateDutyBounds(date) {
+  if(!date) return;
+  document.getElementById('actualDutyStart').value=localDatetimeValue(dutyStart({date}));
+  document.getElementById('actualDutyEnd').value=localDatetimeValue(dutyEnd({date}));
+}
 function openNewDuty() {
   modal.classList.add('duty-date-dialog');
   const now = new Date();
@@ -684,11 +941,13 @@ function openNewDuty() {
     <div class="modal-title">Neuer Dienst</div>
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${initialDate}"></label>
     <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(initialDate)}.</div>
+    ${dutyBoundsForm({date:initialDate})}
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
   document.getElementById('dutyDate').onchange = event => {
+    updateDutyBounds(event.target.value);
     if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
   };
   document.getElementById('saveDuty').onclick = () => {
@@ -698,7 +957,8 @@ function openNewDuty() {
       document.getElementById('modalError').textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
       return;
     }
-    state.duties.push({ id: uid(), date, entries: [] });
+    const bounds=readDutyBounds(date,document.getElementById('modalError'));if(!bounds)return;
+    state.duties.push({ id: uid(), date, ...bounds, entries: [] });
     saveState();
     modal.close();
     currentView = 'dienst';
@@ -717,11 +977,13 @@ function openEditDuty(dutyId) {
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${duty.date}"></label>
     <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(duty.date)}.</div>
     <div class="small-note">Vorhandene Einsätze bleiben erhalten. Beim Speichern wird geprüft, ob sie weiterhin innerhalb des Dienstes liegen.</div>
+    ${dutyBoundsForm(duty)}
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
   document.getElementById('dutyDate').onchange = event => {
+    updateDutyBounds(event.target.value);
     if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
   };
   document.getElementById('saveDuty').onclick = () => {
@@ -733,10 +995,13 @@ function openEditDuty(dutyId) {
       error.textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
       return;
     }
+    const bounds=readDutyBounds(date,error);if(!bounds)return;
+    const previousBounds={startOverride:duty.startOverride,endOverride:duty.endOverride};
     const previousDate = duty.date;
     const dayDifference = Math.round((parseLocalDate(date) - parseLocalDate(previousDate)) / 86400000);
     const previousEntries = duty.entries.map(entry => ({ ...entry }));
     duty.date = date;
+    Object.assign(duty,bounds);
     duty.entries = duty.entries.map(entry => {
       const start = new Date(entry.start);
       const end = new Date(entry.end);
@@ -751,6 +1016,7 @@ function openEditDuty(dutyId) {
     });
     if (!entriesFit) {
       duty.date = previousDate;
+      Object.assign(duty,previousBounds);
       duty.entries = previousEntries;
       error.textContent = 'Mindestens ein Einsatz passt zeitlich nicht zur neuen Dienstzeit. Es wurden keine Änderungen gespeichert.';
       return;
@@ -935,17 +1201,24 @@ function openMenu() {
       </label>
     </div>
     <div id="dutyTimeSettings" class="duty-time-settings" ${settings.showCustomDutyTimes ? '' : 'hidden'}>
-      <div class="small-note">Die Endzeit gilt jeweils für den Folgetag. Änderungen wirken auf die Dienstzeiten des gewählten Wochentags.</div>
+      <div class="small-note">Die Endzeit gilt jeweils für den Folgetag. Änderungen werden für neue Dienste vorgeschlagen; gespeicherte Dienstgrenzen bleiben erhalten.</div>
       ${[1,2,3,4,5,6,0].map(day => `<div class="weekday-time-row"><strong>${WEEKDAY_NAMES[day]}</strong><label><span>Start</span><input id="dutyStart-${day}" type="time" value="${settings.dutyTimes[day].start}"></label><label><span>Ende</span><input id="dutyEnd-${day}" type="time" value="${settings.dutyTimes[day].end}"></label></div>`).join('')}
       <button type="button" class="primary settings-save" id="saveDutyTimeSettings">Dienstzeiten speichern</button>
     </div>
     <div id="paySettings" class="pay-settings" ${settings.showPay ? '' : 'hidden'}>
-      <label class="field"><span>Stundenlohn Bereitschaftsdienst</span><div class="money-input"><input id="workHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.workHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
-      <label class="field"><span>Stundenlohn für Dienstpauschale</span><div class="money-input"><input id="allowanceHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.allowanceHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
+      <div class="small-note"><strong>Abrechnung geprüft: Facharzt, Gruppe II, Stufe 1.</strong> Feiertagsarbeit mit Freizeitausgleich: 35 %. Die bestehenden Tarifzeiträume und Stundenwerte bleiben erhalten. Referenzwerte: NRW, Stufe 1, 40 Stunden. Der Tabellenanstieg 2025 gilt in NRW erst ab November.</div>
+      <label class="field"><span>Tarifgruppe · Stufe 1</span><select id="tariffGroup"><option value="unconfirmed" ${settings.tariffGroup==='unconfirmed'?'selected':''}>Eingruppierung ungeklärt</option><option value="I" ${settings.tariffGroup==='I'?'selected':''}>I · Ärzte</option><option value="II" ${settings.tariffGroup==='II'?'selected':''}>II · Fachärzte</option></select></label>
+      <label class="field"><span>Beschäftigungsumfang (%) · für RB-Staffelung</span><input type="number" id="employmentFraction" min="1" max="100" step="1" value="${settings.employmentFraction?settings.employmentFraction*100:''}" placeholder="Noch ungeklärt"></label>
+      <button type="button" class="secondary-button" id="fillReference">NRW-Tarifwerte für Gültig-ab-Datum vorschlagen</button>
+      <label class="settings-toggle-row"><span>Stundenwerte und Tarifgruppe für diesen Zeitraum geprüft</span><input type="checkbox" id="ratesConfirmed"></label>
+      <label class="field"><span>Einsatzstundenwert Rufbereitschaft · einschließlich Überstundenzuschlag</span><div class="money-input"><input id="workHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.workHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
+      <label class="field"><span>Stundenwert für Rufbereitschaftspauschale</span><div class="money-input"><input id="allowanceHourlyRate" type="number" inputmode="decimal" min="0" step="0.01" value="${settings.allowanceHourlyRate.toFixed(2)}"><span>€ / Std.</span></div></label>
+      <label class="field"><span>Zeitzuschlags-Bemessungsgrundlage (AVR § 7 Abs. 1, Tabellenentgelt Stufe 3 / Monatsdivisor)</span><div class="money-input"><input id="supplementBaseRate" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Noch nicht hinterlegt" value="${settings.supplementBaseRate ?? ''}"><span>€ / Std.</span></div></label>
+      <label class="field"><span>Feiertagsarbeit</span><select id="holidayTimeOff"><option value="unknown" ${settings.holidayTimeOff==='unknown'?'selected':''}>Freizeitausgleich ungeklärt</option><option value="yes" ${settings.holidayTimeOff==='yes'?'selected':''}>Mit Freizeitausgleich (35 %)</option><option value="no" ${settings.holidayTimeOff==='no'?'selected':''}>Ohne Freizeitausgleich (135 %)</option></select></label>
       <label class="field"><span>Gültig ab</span><input id="rateValidFrom" type="date" value="${localDateKey(new Date())}"></label>
       <div class="small-note">Neue Löhne gelten erst ab diesem Datum. Frühere Dienste werden weiterhin mit dem damals gültigen Satz berechnet. Speichere bei einer Lohnerhöhung einfach den neuen Satz mit dem passenden Datum.</div>
       ${settings.rateHistory.length > 1 ? `<div class="rate-history"><strong>Gespeicherte Lohnzeiträume</strong>${settings.rateHistory.filter(r => r.validFrom !== '1900-01-01').slice().reverse().map(r => `<div class="rate-history-row"><span>ab ${fmtShortDate(parseLocalDate(r.validFrom))}</span><span>${fmtMoney(r.workHourlyRate)} / ${fmtMoney(r.allowanceHourlyRate)}</span></div>`).join('')}</div>` : ''}
-      <div class="small-note">Pauschale: Montag–Freitag 200 % dieses Satzes, Samstag/Sonntag 400 %. Die Einsatzstunden werden wie bisher je Dienstart auf volle Stunden aufgerundet und anschließend addiert.</div>
+      <div class="small-note">Pauschale: Montag–Freitag 200 %, Samstag/Sonntag/NRW-Feiertag 400 % nach Starttag. Unter 12 Std.: je angefangener Stunde 12,5 %. Die Einsatzstunden werden wie bisher je Dienstart auf volle Stunden aufgerundet und anschließend addiert.</div>
       <button type="button" class="primary settings-save" id="savePaySettings">Einstellungen speichern</button>
     </div>
     <div class="modal-section-title">Lokale Daten</div>
@@ -1007,6 +1280,12 @@ function openMenu() {
       render();
     }
   };
+  document.getElementById('fillReference').onclick=()=>{
+    const r=referenceRates(document.getElementById('rateValidFrom').value,document.getElementById('tariffGroup').value);
+    if(!r){alert('Referenzwerte verfügbar für NRW, Gruppe I/II, Stufe 1, November 2025 bis Dezember 2026. Historische Werte vorher bitte anhand der Abrechnung hinterlegen.');return;}
+    for(const key of Object.keys(r))document.getElementById(key).value=r[key].toFixed(2);
+    document.getElementById('ratesConfirmed').checked=false;
+  };
   document.getElementById('savePaySettings').onclick = () => {
     const workRate = Number(document.getElementById('workHourlyRate').value.replace?.(',', '.') ?? document.getElementById('workHourlyRate').value);
     const allowanceRate = Number(document.getElementById('allowanceHourlyRate').value.replace?.(',', '.') ?? document.getElementById('allowanceHourlyRate').value);
@@ -1021,10 +1300,22 @@ function openMenu() {
     }
     const history = Array.isArray(state.settings.rateHistory) ? [...state.settings.rateHistory] : [];
     const existingIndex = history.findIndex(item => item.validFrom === validFrom);
-    const newRate = { validFrom, workHourlyRate: workRate, allowanceHourlyRate: allowanceRate };
+    const baseRaw = document.getElementById('supplementBaseRate').value;
+    const supplementBaseRate = baseRaw === '' ? null : Number(baseRaw);
+    if (supplementBaseRate !== null && (!Number.isFinite(supplementBaseRate) || supplementBaseRate <= 0)) {
+      alert('Bitte gültige Bemessungsgrundlage eingeben oder leer lassen.'); return;
+    }
+    const tariffGroup=document.getElementById('tariffGroup').value;
+    const fractionRaw=document.getElementById('employmentFraction').value;
+    const fraction=fractionRaw===''?null:Number(fractionRaw)/100;
+    if(fraction!==null&&(!Number.isFinite(fraction)||fraction<=0||fraction>1)){alert('Beschäftigungsumfang von 1 bis 100 % eingeben.');return;}
+    const ratesConfirmed=document.getElementById('ratesConfirmed').checked;
+    if(ratesConfirmed&&tariffGroup==='unconfirmed'){alert('Tarifgruppe vor Bestätigung auswählen.');return;}
+    if(existingIndex>=0&&!confirm('Dieser Gültig-ab-Zeitraum existiert bereits. Seine Stundenwerte ersetzen? Andere Zeiträume bleiben erhalten.'))return;
+    const newRate = { ...(existingIndex>=0?history[existingIndex]:{}), tariffGroup, employmentFraction:fraction,ratesConfirmed,validFrom, workHourlyRate: workRate, allowanceHourlyRate: allowanceRate, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value };
     if (existingIndex >= 0) history[existingIndex] = newRate; else history.push(newRate);
     history.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-    state.settings = normalizeSettings({ ...state.settings, showPay: toggle.checked, rateHistory: history });
+    state.settings = normalizeSettings({ ...state.settings, showPay: toggle.checked,tariffGroup,employmentFraction:fraction, rateHistory: history, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value });
     saveState();
     haptic();
     modal.close();
@@ -1077,8 +1368,9 @@ async function importBackup(event) {
     const dutyCount = data.duties.length;
     const entryCount = data.duties.reduce((count, duty) => count + duty.entries.length, 0);
     if (confirm(`Die Sicherung enthält ${dutyCount} Dienste und ${entryCount} Einsätze. Vorhandene lokale Daten wirklich ersetzen?`)) {
-      state.duties = data.duties;
-      if (parsed.settings) state.settings = normalizeSettings(parsed.settings);
+      const restored=migrateState({...data,settings:parsed.settings || state.settings});
+      state.duties = restored.duties;
+      state.settings = restored.settings;
       saveState();
       localStorage.setItem(BACKUP_DATE_KEY, new Date().toISOString());
       showBackupReminder();
@@ -1096,14 +1388,14 @@ function csvEscape(value) {
 function exportMonthCsv() {
   const duties = monthDuties().slice().reverse();
   if (!duties.length) { alert('Für diesen Monat sind keine Dienste vorhanden.'); return; }
-  const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Patienten-ID', 'Bemerkung', 'Gerundete Stunden je Dienstart']];
+  const rows = [['Dienst', 'Dienstbeginn', 'Dienstende', 'Dienstart', 'Datum', 'Start', 'Ende', 'Minuten', 'Patienten-ID', 'Bemerkung', 'Gerundete Stunden je Dienstart','Einsatzvergütung EUR (ohne Pauschale)','Status']];
   for (const duty of duties) {
     const rounded = { 'Telefonisch': phoneRoundedHours(duty), 'Im Haus': houseRoundedHours(duty) };
     if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '', '0']);
     for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
       const start = new Date(entry.start);
       const end = new Date(entry.end);
-      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.patientId || '', entry.note || '', rounded[entry.type]]);
+      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.patientId || '', entry.note || '', rounded[entry.type],state.settings.showPay?cents(dutyPay(duty).entryDetails.find(e=>e.id===entry.id).total):'',state.settings.showPay?(dutyPay(duty).incomplete?'Vorläufig':'Berechenbar'):'']);
     }
   }
   const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(';')).join('\r\n');
@@ -1126,14 +1418,15 @@ function printMonthReport() {
         <td data-label="Beginn">${fmtTime(entryStart)}</td>
         <td data-label="Ende">${fmtTime(entryEnd)}</td>
         <td data-label="Dauer">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</td>
-        <td data-label="Patienten-ID">${escapeHtml(entry.patientId || '–')}</td>
-        <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}</td>
+        <td data-label="Patienten-ID">${escapeHtml(entry.patientId || '–')}${/^data:image\/(jpeg|png|webp);base64,/.test(entry.patientIdPhoto||'')?`<img alt="Patienten-ID-Ausschnitt" style="display:block;max-width:150px;max-height:60px" src="${escapeHtml(entry.patientIdPhoto)}">`:''}</td>
+        <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}${state.settings.showPay?`<br>Vergütung ${fmtMoney(dutyPay(duty).entryDetails.find(e=>e.id===entry.id).total)} · ${dutyPay(duty).incomplete?'vorläufig':'ohne Pauschale'}`:''}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="7" class="muted">Keine Einsätze erfasst</td></tr>';
     const pay = state.settings.showPay ? dutyPay(duty) : null;
     return `<section class="duty-block">
       <div class="duty-heading"><div><h2>${fmtDate(dutyStart(duty))}</h2><div class="muted">${dutyTimeText(duty)}</div></div><div class="duty-total">${dutyRoundedHours(duty)} Std.</div></div>
       <div class="duty-summary"><span>Telefonisch: <strong>${phoneMinutes} Min. / ${phoneRoundedHours(duty)} Std.</strong></span><span>Im Haus: <strong>${houseMinutes} Min. / ${houseRoundedHours(duty)} Std.</strong></span>${pay ? `<span>Vergütung: <strong>${fmtMoney(pay.total)}</strong></span>` : ''}</div>
+      ${pay?payDetailCard(duty):''}
       <table class="entries"><thead><tr><th>Art</th><th>Datum</th><th>Beginn</th><th>Ende</th><th>Dauer</th><th>Patienten-ID</th><th>Bemerkung</th></tr></thead><tbody>${entryRows}</tbody></table>
     </section>`;
   }).join('');
@@ -1217,7 +1510,7 @@ modal.addEventListener('click', event => {
   }
 });
 modal.addEventListener('close', () => {
-  stopPatientKamera();
+  closePatientPhotoCamera();
   modal.classList.remove('action-sheet-open');
   modal.classList.remove('duty-date-dialog');
 });
@@ -1256,9 +1549,11 @@ async function openPatientPhotoCamera() {
       audio:false
     });
     video.srcObject = patientPhotoStream;
+    d.addEventListener('close', closePatientPhotoCamera, {once:true});
     d.showModal();
     await video.play();
   } catch (e) {
+    closePatientPhotoCamera();
     console.error(e);
     alert('Die Kamera konnte nicht geöffnet werden. Bitte den Kamerazugriff für diese Webseite erlauben.');
   }
@@ -1444,6 +1739,7 @@ function patientPhotoCropUi() {
     d.close();
   };
   d.querySelector('#ppCropSave').onclick = savePatientPhotoCrop;
+  d.addEventListener('close',()=>{patientPhotoTempImage='';img.removeAttribute('src');patientPhotoDrag=null;});
 
   d._render = render;
   window.addEventListener('resize', render);
