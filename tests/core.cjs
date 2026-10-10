@@ -65,6 +65,7 @@ const uiChecks=vm.runInContext(`(function(){
  renderDutyDetail(state.duties[0].id);check('Detail erzeugt Einzelvergütung',main.innerHTML.includes('entry-pay')&&main.innerHTML.includes('RB-Staffel'));
  openMenu();check('Einstellungen enthalten bestätigte FZA-Auswahl',modalContent.innerHTML.includes('Mit Freizeitausgleich (35 %)')&&modalContent.innerHTML.includes('Gruppe II'));
  check('Vergütungsschalter ist direkt und verständlich erreichbar',modalContent.innerHTML.includes('Vergütung anzeigen')&&!modalContent.innerHTML.includes('Stundenlohn anzeigen'));
+ check('AVR-Auswahl enthält alle Arztgruppen und Stufen',modalContent.innerHTML.includes('Assistenzarzt')&&modalContent.innerHTML.includes('Fachärztin/Facharzt')&&modalContent.innerHTML.includes('Oberärztin/Oberarzt')&&modalContent.innerHTML.includes('Leitende Oberärztin'));
  const payToggle=document.getElementById('showPayToggle');payToggle.checked=false;payToggle.onchange();check('Vergütungsschalter blendet Berechnung direkt aus',state.settings.showPay===false&&document.getElementById('paySettings').hidden===true);
  payToggle.checked=true;payToggle.onchange();check('Vergütungsschalter schaltet Berechnung wieder ein',state.settings.showPay===true&&document.getElementById('paySettings').hidden===false);
  check('Abrechnungsmonat Jahreswechsel',payrollDefaultPaymentMonth(new Date(2026,11,1))==='2027-01');

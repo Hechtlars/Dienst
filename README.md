@@ -1,4 +1,4 @@
-# Dienst – Version 7.42
+# Dienst – Version 7.43
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.43 ergänzt die AVR-Anlage-30-Auswahl: Ärztin/Arzt (Assistenzarzt) I mit Stufe 1–6, Fachärztin/Facharzt II mit Stufe 1–6, Oberärztin/Oberarzt III mit Stufe 1–3 und leitende Oberärztin/leitender Oberarzt IV mit Stufe 1–2. Vollständig verifizierte NRW-Referenzwerte ab März 2026 können übernommen werden; für nicht vollständig belegte Kombinationen wird kein automatischer Anspruch berechnet. Tarifhistorie bleibt unverändert. PWA-Cache auf 7.43 erhöht.
 
 - Version 7.42 macht die bisherige Option verständlich und direkt erreichbar: „Vergütung anzeigen“ blendet alle Berechnungen und Beträge in den Dienst- und Monatsansichten gerätebezogen ein oder aus. Tarifwerte und die vorhandene Historie bleiben dabei gespeichert. PWA-Cache auf 7.42 erhöht.
 

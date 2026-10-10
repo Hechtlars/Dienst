@@ -80,8 +80,10 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    await page.click('#menuButton');await page.selectOption('#tariffGroup','II');await page.fill('#rateValidFrom','2026-03-01');await page.click('#fillReference');
    assert.equal(await page.inputValue('#workHourlyRate'),'50.96');assert.equal(await page.inputValue('#supplementBaseRate'),'50.26');await page.fill('#employmentFraction','100');await page.check('#ratesConfirmed');await page.click('#savePaySettings');
    await page.click('#menuButton');assert.match(await page.textContent('#modalContent'),/Vergütung anzeigen/);assert.equal(await page.isChecked('#showPayToggle'),true);
-   await page.uncheck('#showPayToggle');assert.equal(await page.evaluate(()=>state.settings.showPay),false);assert.equal(await page.locator('.pay-detail-card').count(),0);
-   await page.check('#showPayToggle');assert.equal(await page.evaluate(()=>state.settings.showPay),true);await page.locator('#modalContent .modal-body > .secondary-button').last().click();
+   await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),false);assert.equal(await page.locator('.pay-detail-card').count(),0);
+   await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),true);
+   await page.selectOption('#tariffGroup','III');assert.equal(await page.locator('#tariffStage option').count(),3);await page.selectOption('#tariffStage','2');await page.click('#fillReference');assert.equal(await page.inputValue('#workHourlyRate'),'66.91');assert.equal(await page.inputValue('#allowanceHourlyRate'),'57.59');
+   await page.locator('#modalContent .modal-body > .secondary-button').last().click();
   });
   await run(label+' UI Dienst und Einsatz anlegen/bearbeiten',async()=>{
    await page.click('#newDuty');assert.equal(await page.locator('#modalContent input[type="datetime-local"]').count(),0);await page.fill('#dutyDate','2026-10-05');await page.dispatchEvent('#dutyDate','change');

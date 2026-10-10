@@ -4,7 +4,17 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.42';
+const APP_VERSION = '7.43';
+const TARIFF_GROUPS = Object.freeze({
+  I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
+  II: { label: 'Fachärztin/Facharzt', stages: 6 },
+  III: { label: 'Oberärztin/Oberarzt', stages: 3 },
+  IV: { label: 'Leitende Oberärztin/Leitender Oberarzt', stages: 2 }
+});
+function normalizeTariffGroup(value) { return Object.hasOwn(TARIFF_GROUPS, value) ? value : 'II'; }
+function normalizeTariffStage(group, value) { const stage = Number(value); return Number.isInteger(stage) && stage >= 1 && stage <= TARIFF_GROUPS[normalizeTariffGroup(group)].stages ? stage : 1; }
+function tariffGroupOptions(selected) { return Object.entries(TARIFF_GROUPS).map(([id, group]) => `<option value="${id}" ${id === normalizeTariffGroup(selected) ? 'selected' : ''}>Gruppe ${id} · ${group.label}</option>`).join(''); }
+function tariffStageOptions(group, selected) { const normalizedGroup = normalizeTariffGroup(group), normalizedStage = normalizeTariffStage(normalizedGroup, selected); return Array.from({ length: TARIFF_GROUPS[normalizedGroup].stages }, (_, index) => { const stage = index + 1; return `<option value="${stage}" ${stage === normalizedStage ? 'selected' : ''}>Stufe ${stage}</option>`; }).join(''); }
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -79,8 +89,8 @@ function normalizeSettings(settings = {}) {
   const allowanceHourlyRate = Number.isFinite(Number(settings.allowanceHourlyRate)) ? Number(settings.allowanceHourlyRate) : 43.42;
   let rateHistory = Array.isArray(settings.rateHistory) ? settings.rateHistory
     .filter(item => item && /^\d{4}-\d{2}-\d{2}$/.test(item.validFrom) && Number.isFinite(Number(item.workHourlyRate)) && Number.isFinite(Number(item.allowanceHourlyRate)))
-    .map(item => ({ ...item, validFrom: item.validFrom, workHourlyRate: Number(item.workHourlyRate), allowanceHourlyRate: Number(item.allowanceHourlyRate) })) : [];
-  if (!rateHistory.length) rateHistory = [{ validFrom: '1900-01-01', workHourlyRate, allowanceHourlyRate }];
+    .map(item => { const tariffGroup = normalizeTariffGroup(item.tariffGroup || settings.tariffGroup); return { ...item, validFrom: item.validFrom, workHourlyRate: Number(item.workHourlyRate), allowanceHourlyRate: Number(item.allowanceHourlyRate), tariffGroup, tariffStage: normalizeTariffStage(tariffGroup, item.tariffStage ?? settings.tariffStage) }; }) : [];
+  if (!rateHistory.length) rateHistory = [{ validFrom: '1900-01-01', workHourlyRate, allowanceHourlyRate, tariffGroup: normalizeTariffGroup(settings.tariffGroup), tariffStage: normalizeTariffStage(settings.tariffGroup, settings.tariffStage) }];
   // Nutzerkorrektur 10.10.2026: Feiertagsarbeit erfolgt MIT Freizeitausgleich.
   // Einmalige Migration; Stundenwerte, Gültigkeitsdaten und andere Tarifdaten bleiben erhalten.
   const applyHolidayCorrection = settings.holidayRuleVersion !== 2;
@@ -91,7 +101,7 @@ function normalizeSettings(settings = {}) {
     const prior=rateHistory.at(-1);
     if(prior.workHourlyRate===50.96 && prior.allowanceHourlyRate===43.42) {
       rateHistory.push({validFrom:'2026-03-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,
-        supplementBaseRate:50.26,holidayTimeOff:'yes',tariffGroup:'II',ratesConfirmed:true,
+        supplementBaseRate:50.26,holidayTimeOff:'yes',tariffGroup:'II',tariffStage:1,ratesConfirmed:true,
         source:'Gehaltsabrechnung bestätigt, Stufe 1'});
     }
   }
@@ -108,7 +118,8 @@ function normalizeSettings(settings = {}) {
     ...settings,
     holidayRuleVersion: 2,
     tariffProfileVersion: 1,
-    tariffGroup: ['I','II'].includes(settings.tariffGroup) ? settings.tariffGroup : 'II',
+    tariffGroup: normalizeTariffGroup(latest.tariffGroup || settings.tariffGroup),
+    tariffStage: normalizeTariffStage(latest.tariffGroup || settings.tariffGroup, latest.tariffStage ?? settings.tariffStage),
     employmentFraction: Number(settings.employmentFraction)>0 && Number(settings.employmentFraction)<=1 ? Number(settings.employmentFraction) : null,
     showPay: Boolean(settings.showPay),
     showTimeline: Boolean(settings.showTimeline),
@@ -278,17 +289,25 @@ function ratesForDuty(duty) {
   return applicable || { validFrom: duty.date, workHourlyRate: 0, allowanceHourlyRate: 0, missing: true };
 }
 // Eine einzige Engine für Übersicht, Einzelvergütung, Export und Abgleich.
-// Referenzwerte NRW, Stufe 1; keine automatische Überschreibung lokaler Historie.
+// Referenzwerte der AVR-Anlage 30, NRW, 40 Stunden. Eine Auswahl ersetzt keine
+// bereits gespeicherte Tarifperiode; die Werte werden erst nach dem Speichern übernommen.
 const TARIFF_REFERENCE = [
-  {validFrom:'2025-11-01', I:[5499.85,6034.28], II:[7258.93,8401.96]},
-  {validFrom:'2025-12-01', I:[5609.85,6154.97], II:[7404.11,8570.00]},
-  {validFrom:'2026-03-01', I:[5722.05,6278.07], II:[7552.19,8741.40]}
+  {validFrom:'2025-11-01', monthly:{I:{1:5499.85,3:6034.28},II:{1:7258.93,3:8401.96}}},
+  {validFrom:'2025-12-01', monthly:{I:{1:5609.85,3:6154.97},II:{1:7404.11,3:8570.00}}},
+  {validFrom:'2026-03-01', monthly:{
+    I:{1:5722.05,2:6046.42,3:6278.07,4:6679.58,5:7158.37,6:7355.29},
+    II:{1:7552.19,2:8185.40,3:8741.40,4:9065.74,5:9382.33,6:9698.91},
+    III:{1:9459.56,2:10015.53,3:10810.95},
+    IV:{1:11127.50,2:11922.95}
+  }}
 ];
-function referenceRates(date, group) {
-  const period=TARIFF_REFERENCE.filter(p=>p.validFrom<=date).at(-1);
-  if(!period || !period[group] || date>'2026-12-31') return null;
-  const [individual,stage3]=period[group], divisor=40*4.348;
-  const base=stage3/divisor, allowance=individual/divisor;
+function referenceRates(date, group, stage = 1) {
+  const normalizedGroup=normalizeTariffGroup(group), normalizedStage=normalizeTariffStage(normalizedGroup, stage);
+  const period=TARIFF_REFERENCE.filter(p=>p.validFrom<=date).at(-1), monthly=period?.monthly?.[normalizedGroup];
+  if(!monthly || !monthly[normalizedStage] || date>'2026-12-31') return null;
+  const divisor=40*4.348, allowance=monthly[normalizedStage]/divisor, stage3=monthly[3];
+  if(!stage3) return {allowanceHourlyRate:allowance,workHourlyRate:null,supplementBaseRate:null,incompleteReason:'Für Gruppe IV ist in der AVR-Tabelle keine Stufe 3 ausgewiesen. Die Zuschlags-Bemessungsgrundlage wird deshalb nicht automatisch behauptet.'};
+  const base=stage3/divisor;
   return {workHourlyRate: allowance+base*.15, allowanceHourlyRate:allowance, supplementBaseRate:base};
 }
 function cents(value) { return Math.round((value+Number.EPSILON)*100)/100; }
@@ -1187,8 +1206,9 @@ function openMenu() {
       <button type="button" class="primary settings-save" id="saveDutyTimeSettings">Dienstzeiten speichern</button>
     </div>
     <div id="paySettings" class="pay-settings" ${settings.showPay ? '' : 'hidden'}>
-      <div class="small-note"><strong>Abrechnung geprüft: Facharzt, Gruppe II, Stufe 1.</strong> Feiertagsarbeit mit Freizeitausgleich: 35 %. Die bestehenden Tarifzeiträume und Stundenwerte bleiben erhalten. Referenzwerte: NRW, Stufe 1, 40 Stunden. Der Tabellenanstieg 2025 gilt in NRW erst ab November.</div>
-      <label class="field"><span>Tarifgruppe · Stufe 1</span><select id="tariffGroup"><option value="unconfirmed" ${settings.tariffGroup==='unconfirmed'?'selected':''}>Eingruppierung ungeklärt</option><option value="I" ${settings.tariffGroup==='I'?'selected':''}>I · Ärzte</option><option value="II" ${settings.tariffGroup==='II'?'selected':''}>II · Fachärzte</option></select></label>
+      <div class="small-note"><strong>Bestätigter Ausgangswert: Facharzt, Gruppe II, Stufe 1.</strong> Feiertagsarbeit mit Freizeitausgleich: 35 %. Die bestehenden Tarifzeiträume und Stundenwerte bleiben erhalten. Die Referenzwerte gelten für NRW und 40 Stunden; unvollständige Tarifkombinationen werden nicht als gesicherter Anspruch berechnet.</div>
+      <label class="field"><span>Tarifgruppe</span><select id="tariffGroup">${tariffGroupOptions(settings.tariffGroup)}</select></label>
+      <label class="field"><span>Stufe</span><select id="tariffStage">${tariffStageOptions(settings.tariffGroup, settings.tariffStage)}</select></label>
       <label class="field"><span>Beschäftigungsumfang (%) · für RB-Staffelung</span><input type="number" id="employmentFraction" min="1" max="100" step="1" value="${settings.employmentFraction?settings.employmentFraction*100:''}" placeholder="Noch ungeklärt"></label>
       <button type="button" class="secondary-button" id="fillReference">NRW-Tarifwerte für Gültig-ab-Datum vorschlagen</button>
       <label class="settings-toggle-row"><span>Stundenwerte und Tarifgruppe für diesen Zeitraum geprüft</span><input type="checkbox" id="ratesConfirmed"></label>
@@ -1198,7 +1218,7 @@ function openMenu() {
       <label class="field"><span>Feiertagsarbeit</span><select id="holidayTimeOff"><option value="unknown" ${settings.holidayTimeOff==='unknown'?'selected':''}>Freizeitausgleich ungeklärt</option><option value="yes" ${settings.holidayTimeOff==='yes'?'selected':''}>Mit Freizeitausgleich (35 %)</option><option value="no" ${settings.holidayTimeOff==='no'?'selected':''}>Ohne Freizeitausgleich (135 %)</option></select></label>
       <label class="field"><span>Gültig ab</span><input id="rateValidFrom" type="date" value="${localDateKey(new Date())}"></label>
       <div class="small-note">Neue Löhne gelten erst ab diesem Datum. Frühere Dienste werden weiterhin mit dem damals gültigen Satz berechnet. Speichere bei einer Lohnerhöhung einfach den neuen Satz mit dem passenden Datum.</div>
-      ${settings.rateHistory.length > 1 ? `<div class="rate-history"><strong>Gespeicherte Lohnzeiträume</strong>${settings.rateHistory.filter(r => r.validFrom !== '1900-01-01').slice().reverse().map(r => `<div class="rate-history-row"><span>ab ${fmtShortDate(parseLocalDate(r.validFrom))}</span><span>${fmtMoney(r.workHourlyRate)} / ${fmtMoney(r.allowanceHourlyRate)}</span></div>`).join('')}</div>` : ''}
+      ${settings.rateHistory.length > 1 ? `<div class="rate-history"><strong>Gespeicherte Lohnzeiträume</strong>${settings.rateHistory.filter(r => r.validFrom !== '1900-01-01').slice().reverse().map(r => `<div class="rate-history-row"><span>ab ${fmtShortDate(parseLocalDate(r.validFrom))} · Gruppe ${normalizeTariffGroup(r.tariffGroup)} / Stufe ${normalizeTariffStage(r.tariffGroup, r.tariffStage)}</span><span>${fmtMoney(r.workHourlyRate)} / ${fmtMoney(r.allowanceHourlyRate)}</span></div>`).join('')}</div>` : ''}
       <div class="small-note">Pauschale: Montag–Freitag 200 %, Samstag/Sonntag/NRW-Feiertag 400 % nach Starttag. Unter 12 Std.: je angefangener Stunde 12,5 %. Die Einsatzstunden werden wie bisher je Dienstart auf volle Stunden aufgerundet und anschließend addiert.</div>
       <button type="button" class="primary settings-save" id="savePaySettings">Einstellungen speichern</button>
     </div>
@@ -1220,6 +1240,9 @@ function openMenu() {
   };
   const toggle = document.getElementById('showPayToggle');
   const paySettings = document.getElementById('paySettings');
+  const tariffGroupSelect = document.getElementById('tariffGroup');
+  const tariffStageSelect = document.getElementById('tariffStage');
+  tariffGroupSelect.onchange = () => { tariffStageSelect.innerHTML = tariffStageOptions(tariffGroupSelect.value, 1); };
   const timelineToggle = document.getElementById('showTimelineToggle');
   timelineToggle.onchange = () => {
     state.settings.showTimeline = timelineToggle.checked;
@@ -1260,10 +1283,11 @@ function openMenu() {
     render();
   };
   document.getElementById('fillReference').onclick=()=>{
-    const r=referenceRates(document.getElementById('rateValidFrom').value,document.getElementById('tariffGroup').value);
-    if(!r){alert('Referenzwerte verfügbar für NRW, Gruppe I/II, Stufe 1, November 2025 bis Dezember 2026. Historische Werte vorher bitte anhand der Abrechnung hinterlegen.');return;}
-    for(const key of Object.keys(r))document.getElementById(key).value=r[key].toFixed(2);
+    const r=referenceRates(document.getElementById('rateValidFrom').value,tariffGroupSelect.value,tariffStageSelect.value);
+    if(!r){alert('Für diese Tarifgruppe, Stufe und diesen Zeitraum liegt kein vollständig verifizierter Referenzwert vor. Stundenwerte bitte anhand der Abrechnung hinterlegen.');return;}
+    for(const key of ['workHourlyRate','allowanceHourlyRate','supplementBaseRate']) if(Number.isFinite(r[key])) document.getElementById(key).value=r[key].toFixed(2);
     document.getElementById('ratesConfirmed').checked=false;
+    if(r.incompleteReason) alert(r.incompleteReason);
   };
   document.getElementById('savePaySettings').onclick = () => {
     const workRate = Number(document.getElementById('workHourlyRate').value.replace?.(',', '.') ?? document.getElementById('workHourlyRate').value);
@@ -1284,17 +1308,17 @@ function openMenu() {
     if (supplementBaseRate !== null && (!Number.isFinite(supplementBaseRate) || supplementBaseRate <= 0)) {
       alert('Bitte gültige Bemessungsgrundlage eingeben oder leer lassen.'); return;
     }
-    const tariffGroup=document.getElementById('tariffGroup').value;
+    const tariffGroup=tariffGroupSelect.value;
+    const tariffStage=normalizeTariffStage(tariffGroup, tariffStageSelect.value);
     const fractionRaw=document.getElementById('employmentFraction').value;
     const fraction=fractionRaw===''?null:Number(fractionRaw)/100;
     if(fraction!==null&&(!Number.isFinite(fraction)||fraction<=0||fraction>1)){alert('Beschäftigungsumfang von 1 bis 100 % eingeben.');return;}
     const ratesConfirmed=document.getElementById('ratesConfirmed').checked;
-    if(ratesConfirmed&&tariffGroup==='unconfirmed'){alert('Tarifgruppe vor Bestätigung auswählen.');return;}
-    if(existingIndex>=0&&!confirm('Dieser Gültig-ab-Zeitraum existiert bereits. Seine Stundenwerte ersetzen? Andere Zeiträume bleiben erhalten.'))return;
-    const newRate = { ...(existingIndex>=0?history[existingIndex]:{}), tariffGroup, employmentFraction:fraction,ratesConfirmed,validFrom, workHourlyRate: workRate, allowanceHourlyRate: allowanceRate, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value };
+        if(existingIndex>=0&&!confirm('Dieser Gültig-ab-Zeitraum existiert bereits. Seine Stundenwerte ersetzen? Andere Zeiträume bleiben erhalten.'))return;
+    const newRate = { ...(existingIndex>=0?history[existingIndex]:{}), tariffGroup, tariffStage, employmentFraction:fraction,ratesConfirmed,validFrom, workHourlyRate: workRate, allowanceHourlyRate: allowanceRate, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value };
     if (existingIndex >= 0) history[existingIndex] = newRate; else history.push(newRate);
     history.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-    state.settings = normalizeSettings({ ...state.settings, showPay: toggle.checked,tariffGroup,employmentFraction:fraction, rateHistory: history, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value });
+    state.settings = normalizeSettings({ ...state.settings, showPay: toggle.checked,tariffGroup,tariffStage,employmentFraction:fraction, rateHistory: history, supplementBaseRate, holidayTimeOff: document.getElementById('holidayTimeOff').value });
     saveState();
     haptic();
     modal.close();
