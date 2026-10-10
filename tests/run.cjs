@@ -83,7 +83,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
   });
   await run(label+' UI Tarifparameter speichern',async()=>{
    await page.click('#menuButton');await page.selectOption('#tariffGroup','II');await page.fill('#rateValidFrom','2026-03-01');await page.click('#fillReference');
-   assert.equal(await page.inputValue('#workHourlyRate'),'50.96');assert.equal(await page.inputValue('#supplementBaseRate'),'50.26');await page.fill('#employmentFraction','100');await page.check('#ratesConfirmed');await page.click('#savePaySettings');
+   assert.equal(await page.inputValue('#workHourlyRate'),'50.96');assert.equal(await page.inputValue('#supplementBaseRate'),'50.26');await page.fill('#employmentFraction','100');await page.check('#ratesConfirmed');page.once('dialog',d=>d.accept());await page.click('#savePaySettings');
    await page.click('#menuButton');assert.match(await page.textContent('#modalContent'),/Vergütung anzeigen/);assert.equal(await page.isChecked('#showPayToggle'),true);
    await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),false);assert.equal(await page.locator('.pay-detail-card').count(),0);
    await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),true);
