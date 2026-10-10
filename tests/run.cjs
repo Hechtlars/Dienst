@@ -81,7 +81,10 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    assert.equal(await page.inputValue('#workHourlyRate'),'50.96');assert.equal(await page.inputValue('#supplementBaseRate'),'50.26');await page.fill('#employmentFraction','100');await page.check('#ratesConfirmed');await page.click('#savePaySettings');
   });
   await run(label+' UI Dienst und Einsatz anlegen/bearbeiten',async()=>{
-   await page.click('#newDuty');await page.fill('#dutyDate','2026-10-05');await page.dispatchEvent('#dutyDate','change');await page.click('#saveDuty');
+   await page.click('#newDuty');assert.equal(await page.locator('#modalContent input[type="datetime-local"]').count(),0);await page.fill('#dutyDate','2026-10-05');await page.dispatchEvent('#dutyDate','change');
+   await page.locator('#saveDuty').scrollIntoViewIfNeeded();
+   assert.ok(await page.evaluate(()=>{const b=document.getElementById('saveDuty').getBoundingClientRect(),r=document.getElementById('modalContent').getBoundingClientRect();return b.top>=r.top&&b.bottom<=r.bottom+1;}),'Speichern muss im Dialog erreichbar sein');
+   await page.click('#saveDuty');
    await page.click('[data-view="monat"]');await page.evaluate(()=>{selectedMonth=new Date(2026,9,1);renderMonth();});await page.click('[data-kind="duty"] .swipe-content');await page.click('#newHistoricalEntry');
    await page.fill('#entryDate','2026-10-06');await page.fill('#entryStart','03:00');await page.fill('#entryEnd','03:10');await page.fill('#entryNote','Test');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/50,96/);
    await page.click('[data-kind="entry"] .swipe-content');await page.fill('#entryNote','Bearbeitet');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/Bearbeitet/);

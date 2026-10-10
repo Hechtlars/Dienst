@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.39';
+const APP_VERSION = '7.40';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -915,23 +915,8 @@ function openEntryContextMenu(dutyId, entryId) {
   document.getElementById('contextDeleteEntry').onclick = () => { modal.close(); deleteEntryById(dutyId, entryId); };
 }
 
-function localDatetimeValue(date) { return localDateKey(date)+'T'+pad(date.getHours())+':'+pad(date.getMinutes()); }
-function dutyBoundsForm(duty) {
-  return `<label class="field"><span>Tatsächlicher Beginn</span><input id="actualDutyStart" type="datetime-local" value="${localDatetimeValue(dutyStart(duty))}"></label>
-    <label class="field"><span>Tatsächliches Ende</span><input id="actualDutyEnd" type="datetime-local" value="${localDatetimeValue(dutyEnd(duty))}"></label>
-    <div class="small-note">Unter 12 Stunden: stundenweise RB-Pauschale. Über 24 Stunden: tarifliche Pauschalenanzahl ungeklärt. Beim Hauseinsatz Wegezeiten in Start/Ende einschließen.</div>`;
-}
-function readDutyBounds(date,error) {
-  const start=new Date(document.getElementById('actualDutyStart').value), end=new Date(document.getElementById('actualDutyEnd').value);
-  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<=start||localDateKey(start)!==date) {
-    error.textContent='Gültige Dienstgrenzen eingeben. Beginn muss am ausgewählten Datum liegen, Ende nach Beginn.';return null;
-  }
-  return {startOverride:start.toISOString(),endOverride:end.toISOString()};
-}
-function updateDutyBounds(date) {
-  if(!date) return;
-  document.getElementById('actualDutyStart').value=localDatetimeValue(dutyStart({date}));
-  document.getElementById('actualDutyEnd').value=localDatetimeValue(dutyEnd({date}));
+function scheduledDutyBounds(date) {
+  return {startOverride:dutyStart({date}).toISOString(),endOverride:dutyEnd({date}).toISOString()};
 }
 function openNewDuty() {
   modal.classList.add('duty-date-dialog');
@@ -941,23 +926,21 @@ function openNewDuty() {
     <div class="modal-title">Neuer Dienst</div>
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${initialDate}"></label>
     <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(initialDate)}.</div>
-    ${dutyBoundsForm({date:initialDate})}
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
   document.getElementById('dutyDate').onchange = event => {
-    updateDutyBounds(event.target.value);
     if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
   };
   document.getElementById('saveDuty').onclick = () => {
     const date = document.getElementById('dutyDate').value;
-    if (!date) return;
+    if (!date) { document.getElementById('modalError').textContent = 'Bitte ein Datum auswählen.'; return; }
     if (state.duties.some(duty => duty.date === date)) {
       document.getElementById('modalError').textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
       return;
     }
-    const bounds=readDutyBounds(date,document.getElementById('modalError'));if(!bounds)return;
+    const bounds=scheduledDutyBounds(date);
     state.duties.push({ id: uid(), date, ...bounds, entries: [] });
     saveState();
     modal.close();
@@ -975,16 +958,14 @@ function openEditDuty(dutyId) {
   modalContent.innerHTML = `<div class="modal-body">
     <div class="modal-title">Dienst bearbeiten</div>
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${duty.date}"></label>
-    <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(duty.date)}.</div>
+    <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${dutyTimeText(duty)}.</div>
     <div class="small-note">Vorhandene Einsätze bleiben erhalten. Beim Speichern wird geprüft, ob sie weiterhin innerhalb des Dienstes liegen.</div>
-    ${dutyBoundsForm(duty)}
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Änderungen speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
   document.getElementById('dutyDate').onchange = event => {
-    updateDutyBounds(event.target.value);
-    if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
+    if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${event.target.value===duty.date ? dutyTimeText(duty) : scheduleText(event.target.value)}.`;
   };
   document.getElementById('saveDuty').onclick = () => {
     const date = document.getElementById('dutyDate').value;
@@ -995,7 +976,7 @@ function openEditDuty(dutyId) {
       error.textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
       return;
     }
-    const bounds=readDutyBounds(date,error);if(!bounds)return;
+    const bounds=date===duty.date ? {startOverride:dutyStart(duty).toISOString(),endOverride:dutyEnd(duty).toISOString()} : scheduledDutyBounds(date);
     const previousBounds={startOverride:duty.startOverride,endOverride:duty.endOverride};
     const previousDate = duty.date;
     const dayDifference = Math.round((parseLocalDate(date) - parseLocalDate(previousDate)) / 86400000);

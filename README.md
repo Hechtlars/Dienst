@@ -1,4 +1,4 @@
-# Dienst – Version 7.39
+# Dienst – Version 7.40
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -7,12 +7,13 @@ Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build un
 1. Vor dem Update in der bisherigen App eine Sicherung exportieren.
 2. ZIP entpacken. Die Dateien aus dem ZIP direkt im bisherigen GitHub-Pages-Verzeichnis ersetzen. Die ZIP selbst ist keine Website.
 3. Die bisherige URL weiterverwenden. Persönliche Browserdaten bleiben an diese Adresse gebunden.
-4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.39.
+4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.40.
 
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
 
+- Version 7.40 stellt den kompakten Dienst-Dialog wieder her: Datum wählen und speichern; Beginn und Ende werden aus den Wochentagsvorgaben bzw. den individuellen Einstellungen übernommen. Keine zusätzlichen Uhrzeitfelder. Dialoginhalte können innerhalb der verfügbaren Höhe scrollen. Bereits gespeicherte abweichende Dienstzeiten bleiben erhalten. Bei unverändertem Datum werden auch beim Bearbeiten die vorhandenen Grenzen beibehalten; bei Datumänderung gelten die Vorgaben des neuen Wochentags, und Einsätze werden wie bisher mitverschoben und geprüft. PWA-Cache auf 7.40 erhöht.
 - Version 7.39 korrigiert die verschobene Monatsvergütung: Titel und Betrag, Aufschlüsselung sowie Tarifhinweise erhalten getrennte Zeilen. Auf schmalen Displays steht der Betrag unter dem Titel. Lange Einzelvergütungstexte können umbrechen. PWA-Cache auf 7.39 erhöht.
 - Bestehende Vergütungsengine erweitert: historische Zuschlagsfenster, Zuschlagskonkurrenz, RB-Staffelung, kurze RB unter zwölf Stunden, Einzelbeträge und Brutto-Soll-Ist-Abgleich.
 - Feiertagskorrektur des Nutzers: mit Freizeitausgleich, 35 %. Bestehende Tarifperioden werden einmalig entsprechend korrigiert, ihre Stundenwerte bleiben erhalten.
@@ -21,7 +22,7 @@ Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Diese
 - Telefonzeiten pro Dienst gemeinsam aufgerundet; Hauseinsätze einzeln. Einzelbeträge bei Telefonaten sind ausdrücklich Anteile am gemeinsamen Telefonpool.
 - RB-Kernnacht: eigene Mindestrundung unter einer Stunde; Zusatz AiRB und zusätzliche Zeitanteile entsprechend den Lohnartengruppen getrennt dargestellt.
 - Gehaltsvergleich speichert Leistungsmonat und Auszahlungsmonat getrennt; Auszahlungsvorschlag Folgemonat. Istwerte werden lokal gespeichert und mitgesichert.
-- Alte Dienstzeiten bei Migration eingefroren; spätere Einstellungen wirken als Vorgabe für neue Dienste. Dienstgrenzen sind individuell bearbeitbar.
+- Alte Dienstzeiten bei Migration eingefroren; spätere Einstellungen wirken als Vorgabe für neue Dienste. Individuelle Wochentagszeiten bleiben in den Einstellungen konfigurierbar.
 - PDF-Bericht enthält Vergütungsdetails und lokale Patienten-ID-Ausschnitte; CSV enthält Einzelbeträge und Status.
 - Veralteter Kamera-Aufruf beim Schließen des Dialogs repariert, Kamerastream und vollständiges temporäres Foto werden beim Schließen verworfen.
 - Cache-Version aktualisiert, fremde Cache-Namen werden beim Update erhalten. Speicherausfälle werden sichtbar gemeldet.
@@ -40,7 +41,7 @@ Angezeigte Abrechnungsstunden und Stundensätze können intern genauer sein. Der
 
 ## Tests und Grenzen
 
-53 automatisierte Prüfungen bestanden: Tarif-, Berechnungs-, Migrationstests und Funktionsprüfungen der Formularhandler im Node-DOM-Testhost. JavaScript-Syntax, lokale Asset-Verweise und ZIP-Struktur geprüft. Ergebnisse in tests/core-results.json.
+70 automatisierte Prüfungen bestanden: Tarif-, Berechnungs-, Migrationstests und Funktionsprüfungen der Formularhandler im Node-DOM-Testhost. Einschließlich Anlegen allein per Datum für alle Wochentage, individuelle Zeitvorgaben, Duplikatprüfung, fehlendes Datum, Bearbeiten, Verschieben und Zurückweisen nicht passender Einsätze ohne Datenverlust. JavaScript-Syntax, lokale Asset-Verweise und ZIP-Struktur geprüft. Ergebnisse in tests/core-results.json.
 
 **Keine vollständige Browserfreigabe:** Chromium-/WebKit-Browserprüfungen konnten in dieser Umgebung nicht ausgeführt werden. Mobiles Layout, Kamera-Hardware, Service-Worker-Update, echtes Offline-Verhalten und Druckdialog sind deshalb nicht abschließend getestet. Ein Browser-Testskript liegt in tests/run.cjs bei; es ist nicht als bestanden ausgewiesen. Vor produktiver Nutzung müssen diese Prüfungen auf dem Zielgerät erfolgen.
 
