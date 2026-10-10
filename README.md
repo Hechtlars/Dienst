@@ -1,17 +1,22 @@
-# Dienst – Version 7.40
+# Dienst – Version 7.41
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
-## GitHub Pages aktualisieren
+## Direkte Updates über GitHub
 
-1. Vor dem Update in der bisherigen App eine Sicherung exportieren.
-2. ZIP entpacken. Die Dateien aus dem ZIP direkt im bisherigen GitHub-Pages-Verzeichnis ersetzen. Die ZIP selbst ist keine Website.
-3. Die bisherige URL weiterverwenden. Persönliche Browserdaten bleiben an diese Adresse gebunden.
-4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.40.
+Änderungen können direkt im bestehenden Repository Hechtlars/Dienst vorgenommen werden. Manuelles Entpacken und Hochladen von ZIP-Dateien ist für diesen Ablauf nicht erforderlich. Die öffentliche Adresse bleibt https://hechtlars.github.io/Dienst/.
+
+Der Workflow „Dienst prüfen und veröffentlichen“ führt auf GitHub zunächst Syntax-, Tarif-, Berechnungs-, Migrations- und Browserprüfungen aus. Die Browserprüfung verwendet Chromium und WebKit und kontrolliert Bedienung, Sicherungen, mobiles Layout und Offline-Verhalten. Nur nach erfolgreichen Prüfungen wird die Website aus main veröffentlicht. Danach kontrolliert ein weiterer Browserlauf die tatsächliche Live-Version, Dienstanlage und lokale Speicherung. Fehlgeschlagene Prüfungen vor dem Veröffentlichen belassen die bisherige Live-Version.
+
+GitHub Pages verwendet dafür die Quelle **GitHub Actions**. Die Pipeline übernimmt ausschließlich die öffentlichen Website-Dateien; Tests, Abhängigkeiten und persönliche Sicherungen gehören nicht zum veröffentlichten Website-Paket. Prüfergebnisse und Screenshots sind beim jeweiligen GitHub-Actions-Durchlauf abrufbar.
+
+Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danach ihre neue Version; falls angezeigt, „Aktualisieren“ antippen. Persönliche Daten bleiben im Browser und werden durch diesen Veröffentlichungsablauf nicht synchronisiert.
 
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.41 richtet direkte Updates mit vorgeschalteten Prüfungen und anschließender Live-Kontrolle ein. Eine fehlgeschlagene Updateprüfung beim Offline-Neustart wird abgefangen. Der Fehler wurde durch die echte Browserprüfung gefunden; PWA-Cache auf 7.41 erhöht.
 
 - Version 7.40 stellt den kompakten Dienst-Dialog wieder her: Datum wählen und speichern; Beginn und Ende werden aus den Wochentagsvorgaben bzw. den individuellen Einstellungen übernommen. Keine zusätzlichen Uhrzeitfelder. Dialoginhalte können innerhalb der verfügbaren Höhe scrollen. Bereits gespeicherte abweichende Dienstzeiten bleiben erhalten. Bei unverändertem Datum werden auch beim Bearbeiten die vorhandenen Grenzen beibehalten; bei Datumänderung gelten die Vorgaben des neuen Wochentags, und Einsätze werden wie bisher mitverschoben und geprüft. PWA-Cache auf 7.40 erhöht.
 - Version 7.39 korrigiert die verschobene Monatsvergütung: Titel und Betrag, Aufschlüsselung sowie Tarifhinweise erhalten getrennte Zeilen. Auf schmalen Displays steht der Betrag unter dem Titel. Lange Einzelvergütungstexte können umbrechen. PWA-Cache auf 7.39 erhöht.
@@ -43,9 +48,9 @@ Angezeigte Abrechnungsstunden und Stundensätze können intern genauer sein. Der
 
 70 automatisierte Prüfungen bestanden: Tarif-, Berechnungs-, Migrationstests und Funktionsprüfungen der Formularhandler im Node-DOM-Testhost. Einschließlich Anlegen allein per Datum für alle Wochentage, individuelle Zeitvorgaben, Duplikatprüfung, fehlendes Datum, Bearbeiten, Verschieben und Zurückweisen nicht passender Einsätze ohne Datenverlust. JavaScript-Syntax, lokale Asset-Verweise und ZIP-Struktur geprüft. Ergebnisse in tests/core-results.json.
 
-**Keine vollständige Browserfreigabe:** Chromium-/WebKit-Browserprüfungen konnten in dieser Umgebung nicht ausgeführt werden. Mobiles Layout, Kamera-Hardware, Service-Worker-Update, echtes Offline-Verhalten und Druckdialog sind deshalb nicht abschließend getestet. Ein Browser-Testskript liegt in tests/run.cjs bei; es ist nicht als bestanden ausgewiesen. Vor produktiver Nutzung müssen diese Prüfungen auf dem Zielgerät erfolgen.
+**Browserprüfung durchgeführt:** Der GitHub-Actions-Durchlauf vom 10. Oktober 2026 hat 156 Prüfpositionen in Chromium (Desktop und mobil) sowie WebKit (mobil) ohne Fehler abgeschlossen. Dazu gehören Tarifberechnung, Migration, Dienstanlage per Datum, Einsatzbearbeitung, Gehaltsvergleich, CSV/PDF-Bericht, Backup-Export/Import, Löschen und Wiederherstellen, Fotoausschnitt, Layout bei 320/390/430/768 Pixeln und Offline-Neustart. Ergebnisse in tests/results.json und beim jeweiligen GitHub-Actions-Durchlauf. Physische Kamera-Hardware, der native iPhone-Druckdialog und das Update einer bereits installierten iPhone-PWA sind damit weiterhin nicht auf einem echten Gerät geprüft. Die UI-Tests ersetzen keine abschließende Bestätigung ungeklärter Tarifregeln.
 
-Berechnungstests vom entpackten Projektstamm: `node tests/core.cjs`. Browsertests benötigen Node und Playwright: `npm install --no-save playwright`, `npx playwright install chromium webkit`, Projekt per `python3 -m http.server 8765` bereitstellen, dann `node tests/run.cjs`.
+Berechnungstests vom Projektstamm: `node tests/core.cjs`. Browsertests: `npm ci`, `npx playwright install --with-deps chromium webkit`, anschließend `npm run test:browser`. Der Test startet und beendet seinen lokalen Testserver selbst. Live-Test: `LIVE_URL=https://hechtlars.github.io/Dienst/ node tests/live.cjs`.
 
 ## Tarifquellen (geprüft Oktober 2026)
 

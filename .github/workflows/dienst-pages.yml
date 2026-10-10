@@ -1,0 +1,113 @@
+name: Dienst prüfen und veröffentlichen
+
+on:
+  push:
+    branches: [main, codex/direkte-updates]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dienst-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Berechnung und Browser
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      TZ: Europe/Berlin
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: JavaScript prüfen
+        run: |
+          node --check app.js
+          node --check service-worker.js
+      - name: Tarif, Berechnung und Migration prüfen
+        run: npm test
+      - name: Chromium und WebKit installieren
+        run: npx playwright install --with-deps chromium webkit
+      - name: Bedienung, Sicherungen, Layout und Offline prüfen
+        run: npm run test:browser
+      - name: Prüfergebnisse sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dienst-pruefergebnisse
+          path: |
+            tests/*results.json
+            tests/*.png
+          retention-days: 14
+
+  build:
+    name: Geprüfte Website vorbereiten
+    needs: tests
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Nur Website-Dateien übernehmen
+        run: |
+          mkdir _site
+          cp index.html app.js styles.css manifest.webmanifest service-worker.js _site/
+          cp -R icons _site/
+          touch _site/.nojekyll
+          node -e "require('fs').writeFileSync('_site/deployment.json', JSON.stringify({commit:process.env.GITHUB_SHA,run:process.env.GITHUB_RUN_ID}))"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Geprüfte Website veröffentlichen
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
+  live:
+    name: Live-Version kontrollieren
+    needs: deploy
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      LIVE_URL: ${{ needs.deploy.outputs.url }}
+      TZ: Europe/Berlin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Veröffentlichte Version und Dienstformular prüfen
+        run: node tests/live.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dienst-live-pruefung
+          path: tests/live-*.png
+          retention-days: 14

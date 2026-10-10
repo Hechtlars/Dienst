@@ -1,0 +1,4 @@
+node_modules/
+_site/
+tests/*.png
+tests/*-failure.txt
