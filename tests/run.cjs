@@ -106,6 +106,21 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
   });
   await run(label+' UI Breite, Fehlerfreiheit und Offline',async()=>{
    await page.click('[data-view="monat"]');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   // Regression: the monthly amount and both long notes must fit inside
+   // the card, including the viewport width shown in the iPhone report.
+   for(const testWidth of [320,390,430,768]) {
+    await page.setViewportSize({width:testWidth,height:844});
+    const layout=await page.evaluate(()=>{
+     const card=document.querySelector('.pay-month-card'),bounds=card.getBoundingClientRect();
+     const parts=[...card.children].map(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};});
+     return {bounds:{left:bounds.left,right:bounds.right,bottom:bounds.bottom},parts,scrollWidth:card.scrollWidth,clientWidth:card.clientWidth};
+    });
+    assert.ok(layout.scrollWidth<=layout.clientWidth+1,'Vergütungskarte läuft horizontal über bei '+testWidth);
+    assert.ok(layout.parts.every(p=>p.left>=layout.bounds.left&&p.right<=layout.bounds.right+1&&p.bottom<=layout.bounds.bottom+1),'Vergütungstext außerhalb der Karte bei '+testWidth);
+    assert.ok(layout.parts[2].top>=Math.max(layout.parts[0].bottom,layout.parts[1].bottom),'Aufschlüsselung muss unter Titel und Betrag stehen');
+    if(layout.parts[3])assert.ok(layout.parts[3].top>=layout.parts[2].bottom,'Tarifhinweis muss unter Aufschlüsselung stehen');
+   }
+   await page.setViewportSize({width,height:844});
    await page.screenshot({path:path.join(__dirname,label+'.png'),fullPage:true});
    await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForTimeout(200);await context.setOffline(true);await page.reload();assert.match(await page.textContent('#mainContent'),/Dienst|Rufbereitschaft/);await context.setOffline(false);
    assert.deepEqual(errors,[]);

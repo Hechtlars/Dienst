@@ -247,13 +247,15 @@ dialog.action-sheet-open button {
 .money-input input { padding-right: 82px; }
 .money-input span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); margin: 0 !important; color: var(--secondary); font-size: 14px !important; pointer-events: none; }
 .settings-save { margin-top: 12px; }
-.pay-month-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 17px; padding: 16px; margin: 10px 0 12px; box-shadow: var(--shadow); }
+.pay-month-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 17px; padding: 16px; margin: 10px 0 12px; box-shadow: var(--shadow); }
+.pay-month-card > * { min-width: 0; }
+.pay-month-card > .small-note { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
 .pay-kicker { font-size: 15px; font-weight: 750; }
 .pay-subtitle { color: var(--secondary); font-size: 12px; margin-top: 3px; }
 .pay-month-value { color: var(--accent); font-weight: 850; font-size: 22px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pay-detail-card .row-value { font-variant-numeric: tabular-nums; }
 @media (max-width: 430px) {
-  .pay-month-card { align-items: flex-start; }
+  .pay-month-card { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .pay-month-value { font-size: 20px; }
 }
 @media (prefers-color-scheme: dark) {
@@ -642,7 +644,7 @@ dialog.action-sheet-open button {
 }
 
 /* Vergütungsdetails und mobile Abrechnung */
-.entry-pay{margin-top:8px;font-size:14px;font-weight:650;color:#17496e}
+.entry-pay{margin-top:8px;font-size:14px;font-weight:650;color:#17496e;overflow-wrap:anywhere}
 .entry-pay small{display:block;font-size:11px;font-weight:400;line-height:1.5;color:#596571}
 .pay-detail-card .row{align-items:flex-start;gap:12px}.pay-detail-card .row-title{white-space:normal}
 .pay-detail-card .row-value{flex-shrink:0}.pay-detail-card .small-note{padding:10px 14px}

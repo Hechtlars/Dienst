@@ -1,4 +1,4 @@
-# Dienst – Version 7.38
+# Dienst – Version 7.39
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -7,12 +7,13 @@ Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build un
 1. Vor dem Update in der bisherigen App eine Sicherung exportieren.
 2. ZIP entpacken. Die Dateien aus dem ZIP direkt im bisherigen GitHub-Pages-Verzeichnis ersetzen. Die ZIP selbst ist keine Website.
 3. Die bisherige URL weiterverwenden. Persönliche Browserdaten bleiben an diese Adresse gebunden.
-4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.38.
+4. App öffnen, gegebenenfalls „Aktualisieren“ drücken. Unter Mehr steht Version 7.39.
 
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
 
+- Version 7.39 korrigiert die verschobene Monatsvergütung: Titel und Betrag, Aufschlüsselung sowie Tarifhinweise erhalten getrennte Zeilen. Auf schmalen Displays steht der Betrag unter dem Titel. Lange Einzelvergütungstexte können umbrechen. PWA-Cache auf 7.39 erhöht.
 - Bestehende Vergütungsengine erweitert: historische Zuschlagsfenster, Zuschlagskonkurrenz, RB-Staffelung, kurze RB unter zwölf Stunden, Einzelbeträge und Brutto-Soll-Ist-Abgleich.
 - Feiertagskorrektur des Nutzers: mit Freizeitausgleich, 35 %. Bestehende Tarifperioden werden einmalig entsprechend korrigiert, ihre Stundenwerte bleiben erhalten.
 - Bestätigtes Profil: Entgeltgruppe II, Stufe 1. Fehlender Zeitraum ab März 2026 wird bei den bisherigen Standardsätzen mit 50,96 Euro Einsatzstundenwert, 43,42 Euro Pauschalenbasis und 50,26 Euro Zuschlagsbasis ergänzt. Bereits gespeicherte neuere Tarifperioden werden nicht überschrieben.
