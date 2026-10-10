@@ -1,4 +1,4 @@
-# Dienst – Version 7.43
+# Dienst – Version 7.44
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.44 korrigiert die bestätigte historische Periode für August 2026: Nur beim belegten Profil Fachärztin/Facharzt II, Stufe 1 und den bereits gespeicherten Werten 50,96 € / 43,42 € wird eine fehlende Tarifperiode ab März 2026 mit Zuschlagsbasis 50,26 € und bestätigtem Status ergänzt. Davon abweichende oder vorhandene Tarifperioden bleiben unverändert. Die AiRB-/RB-00–06-Einzelvergütung rundet die bewerteten 50%-Stunden vor der Multiplikation; die zwei August-Einsätze ergeben damit zusammen 83,06 € wie die geprüfte Abrechnung. Nicht aus den verfügbaren Einsatzdaten ableitbare Zeit-Zuschläge werden weiterhin nicht als gesicherte Ansprüche behauptet. PWA-Cache auf 7.44 erhöht.
 
 - Version 7.43 ergänzt die AVR-Anlage-30-Auswahl: Ärztin/Arzt (Assistenzarzt) I mit Stufe 1–6, Fachärztin/Facharzt II mit Stufe 1–6, Oberärztin/Oberarzt III mit Stufe 1–3 und leitende Oberärztin/leitender Oberarzt IV mit Stufe 1–2. Vollständig verifizierte NRW-Referenzwerte ab März 2026 können übernommen werden; für nicht vollständig belegte Kombinationen wird kein automatischer Anspruch berechnet. Tarifhistorie bleibt unverändert. PWA-Cache auf 7.43 erhöht.
 

@@ -16,7 +16,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
     const checks=[];function check(name,condition){if(!condition)throw Error(name);checks.push(name);}
     function near(a,b){return Math.abs(a-b)<.000001;}
     const rate={validFrom:'1900-01-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,supplementBaseRate:50.26,holidayTimeOff:'no',ratesConfirmed:true,employmentFraction:1};
-    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,showPay:true,rateHistory:[rate],employmentFraction:1,payroll:{}});
+    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,august2026RateCorrectionVersion:1,showPay:true,rateHistory:[rate],employmentFraction:1,payroll:{}});
     const entry=(id,start,end,type='Telefonisch')=>({id,type,start:new Date(start).toISOString(),end:new Date(end).toISOString(),note:''});
     const duty=(date,entries=[])=>({id:date,date,entries,startOverride:new Date(date+'T07:15').toISOString(),endOverride:new Date(new Date(date+'T07:15').getTime()+24*3600000).toISOString()});
     let d=duty('2026-10-05',[entry('a','2026-10-05T19:00','2026-10-05T19:10'),entry('b','2026-10-05T19:20','2026-10-05T19:30')]);state.duties=[d];
@@ -31,11 +31,16 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
     check('Karfreitag nicht Ostersonntag',!isNrwHoliday(new Date('2026-04-05T12:00')));
     const corrected=normalizeSettings({tariffProfileVersion:1,rateHistory:[rate],holidayTimeOff:'no'});check('Nutzerkorrektur FZA historisch ohne Änderung der Stundensätze',corrected.holidayTimeOff==='yes'&&corrected.rateHistory[0].holidayTimeOff==='yes'&&corrected.rateHistory[0].workHourlyRate===50.96);
     state.settings=corrected;d=duty('2026-05-01',[entry('h','2026-05-01T11:00','2026-05-01T12:00')]);state.duties=[d];check('Feiertag mit FZA 35 %',near(dutyPay(d).supplements.holiday,50.26*.35));
-    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,showPay:true,rateHistory:[rate],employmentFraction:1,payroll:{}});
+    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,august2026RateCorrectionVersion:1,showPay:true,rateHistory:[rate],employmentFraction:1,payroll:{}});
     d=duty('2026-10-05',[entry('n','2026-10-06T03:00','2026-10-06T03:10')]);state.duties=[d];p=dutyPay(d);
     check('Nacht nur tatsächliche 10 Minuten',near(p.supplements.night,50.26*.2/6*1.5));
     check('Zusatz AiRB 50 % separat von Zeitlohnarten',near(p.specialRB,.5*50.96)&&p.midnightRatedMinutes===60);
-    d.entries=[entry('n','2026-10-06T03:00','2026-10-06T04:10')];p=dutyPay(d);check('Sonder-RB 70 Minuten ohne weitere Rundung',p.midnightRatedMinutes===70&&near(p.specialRB,.5*50.96*70/60));
+    d.entries=[entry('n','2026-10-06T03:00','2026-10-06T04:10')];p=dutyPay(d);check('Sonder-RB rundet bewertete Stunden vor Stundenwert',p.midnightRatedMinutes===70&&near(p.specialRB,cents(.58*50.96)));
+    const legacyAugust=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,tariffGroup:'II',tariffStage:1,rateHistory:[{validFrom:'1900-01-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,tariffGroup:'II',tariffStage:1,holidayTimeOff:'yes',ratesConfirmed:false}]});
+    const augustRate=legacyAugust.rateHistory.filter(r=>r.validFrom<='2026-08-01').at(-1);check('Migration ergänzt belegte August-2026-Basis ohne alte Periode zu ändern',augustRate.validFrom==='2026-03-01'&&augustRate.supplementBaseRate===50.26&&augustRate.ratesConfirmed&&legacyAugust.rateHistory[0].supplementBaseRate===undefined);
+    const otherProfile=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,tariffGroup:'III',tariffStage:1,rateHistory:[{validFrom:'1900-01-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,tariffGroup:'III',tariffStage:1,holidayTimeOff:'yes',ratesConfirmed:false}]});check('Migration überschreibt abweichendes Profil nicht',otherProfile.rateHistory.length===1&&otherProfile.rateHistory[0].supplementBaseRate===undefined&&!otherProfile.rateHistory[0].ratesConfirmed);
+    state.settings=legacyAugust;const aug25=duty('2026-08-25',[entry('a','2026-08-26T00:00','2026-08-26T02:16')]),aug27=duty('2026-08-27',[entry('b','2026-08-28T05:50','2026-08-28T06:00')]);state.duties=[aug25,aug27];check('August AiRB ergibt Abrechnungsbetrag 83,06 EUR',near(monthPayDetails(state.duties).specialRB,83.06));
+    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,august2026RateCorrectionVersion:1,showPay:true,rateHistory:[rate],employmentFraction:1,payroll:{}});
     d.entries=[entry('n','2026-10-05T23:50','2026-10-06T00:10')];p=dutyPay(d);check('Mitternachtsgrenze',p.buckets.midnight===10&&p.buckets.night===20);
     d=duty('2025-09-30',[entry('n','2025-09-30T20:00','2025-09-30T21:00')]);state.duties=[d];check('Historisch Nacht erst 21 Uhr',dutyPay(d).supplements.night===0);
     d.entries=[entry('n','2025-09-30T21:00','2025-09-30T22:00')];check('Historisch 15 %',near(dutyPay(d).supplements.night,50.26*.15));
@@ -71,7 +76,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
     check('Referenz NRW erster Schritt November',referenceRates('2025-10-31','II')===null&&referenceRates('2025-11-01','II').allowanceHourlyRate>41);
     check('Referenz Facharzt Basis',near(referenceRates('2026-03-01','II').supplementBaseRate,8741.4/173.92));
     check('Referenz EG I eigenständig',near(referenceRates('2026-03-01','I').allowanceHourlyRate,5722.05/173.92));
-    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,rateHistory:[{...rate,supplementBaseRate:null}]});d=duty('2026-10-05',[entry('n','2026-10-06T03:00','2026-10-06T03:10')]);state.duties=[d];check('Unbekannter Zuschlag nicht hinzugefügt',dutyPay(d).supplements.night===0&&dutyPay(d).incomplete);
+    state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,august2026RateCorrectionVersion:1,rateHistory:[{...rate,supplementBaseRate:null}]});d=duty('2026-10-05',[entry('n','2026-10-06T03:00','2026-10-06T03:10')]);state.duties=[d];check('Unbekannter Zuschlag nicht hinzugefügt',dutyPay(d).supplements.night===0&&dutyPay(d).incomplete);
     state.settings=normalizeSettings({tariffProfileVersion:1,holidayRuleVersion:2,showPay:true,rateHistory:[rate],employmentFraction:1});state.duties=[];saveState();render();return checks;
    });
    checks.forEach(name=>results.push({name:label+' '+name,status:'PASS'}));

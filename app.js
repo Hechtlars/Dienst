@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.43';
+const APP_VERSION = '7.44';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -95,7 +95,7 @@ function normalizeSettings(settings = {}) {
   // Einmalige Migration; Stundenwerte, Gültigkeitsdaten und andere Tarifdaten bleiben erhalten.
   const applyHolidayCorrection = settings.holidayRuleVersion !== 2;
   if (applyHolidayCorrection) rateHistory = rateHistory.map(item => ({...item, holidayTimeOff:'yes'}));
-  // Abrechnung Mai/Juni 2026 bestätigt II/1 und diese drei Stundenwerte.
+  // Abrechnung August 2026 bestätigt II/1 und diese drei Stundenwerte.
   // Nur eine fehlende Periode ergänzen; vorhandene Tarifhistorie niemals ersetzen.
   if (settings.tariffProfileVersion !== 1 && !rateHistory.some(item => item.validFrom >= '2026-03-01')) {
     const prior=rateHistory.at(-1);
@@ -103,6 +103,24 @@ function normalizeSettings(settings = {}) {
       rateHistory.push({validFrom:'2026-03-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,
         supplementBaseRate:50.26,holidayTimeOff:'yes',tariffGroup:'II',tariffStage:1,ratesConfirmed:true,
         source:'Gehaltsabrechnung bestätigt, Stufe 1'});
+    }
+  }
+  // Korrektur 7.44: Ältere Installationen konnten die bestätigte März-Periode
+  // wegen einer bereits gesetzten Profilversion noch nicht erhalten. Ergänzt wird
+  // ausschließlich das belegte Profil II/1 mit den identischen Stundenwerten.
+  // Abweichende oder ausdrücklich angelegte Tarifperioden bleiben unangetastet.
+  const applyAugust2026Correction=settings.august2026RateCorrectionVersion!==1;
+  if(applyAugust2026Correction) {
+    const augustDate='2026-08-01';
+    const applicable=rateHistory.filter(item=>item.validFrom<=augustDate).at(-1);
+    const profileIsConfirmedII1=applicable && normalizeTariffGroup(applicable.tariffGroup||settings.tariffGroup)==='II' && normalizeTariffStage('II',applicable.tariffStage ?? settings.tariffStage)===1;
+    const valuesMatch=applicable && applicable.workHourlyRate===50.96 && applicable.allowanceHourlyRate===43.42;
+    const hasMarch2026Period=rateHistory.some(item=>item.validFrom>='2026-03-01'&&item.validFrom<=augustDate);
+    if(profileIsConfirmedII1 && valuesMatch && !hasMarch2026Period) {
+      rateHistory.push({validFrom:'2026-03-01',workHourlyRate:50.96,allowanceHourlyRate:43.42,supplementBaseRate:50.26,holidayTimeOff:'yes',tariffGroup:'II',tariffStage:1,ratesConfirmed:true,source:'Gehaltsabrechnung August 2026 bestätigt'});
+    } else if(profileIsConfirmedII1 && valuesMatch && (!(Number(applicable.supplementBaseRate)>0) || !applicable.ratesConfirmed)) {
+      const index=rateHistory.indexOf(applicable);
+      rateHistory[index]={...applicable,supplementBaseRate:50.26,holidayTimeOff:'yes',ratesConfirmed:true,source:applicable.source||'Gehaltsabrechnung August 2026 bestätigt'};
     }
   }
   rateHistory.sort((a, b) => a.validFrom.localeCompare(b.validFrom));
@@ -118,6 +136,7 @@ function normalizeSettings(settings = {}) {
     ...settings,
     holidayRuleVersion: 2,
     tariffProfileVersion: 1,
+    august2026RateCorrectionVersion: 1,
     tariffGroup: normalizeTariffGroup(latest.tariffGroup || settings.tariffGroup),
     tariffStage: normalizeTariffStage(latest.tariffGroup || settings.tariffGroup, latest.tariffStage ?? settings.tariffStage),
     employmentFraction: Number(settings.employmentFraction)>0 && Number(settings.employmentFraction)<=1 ? Number(settings.employmentFraction) : null,
@@ -381,7 +400,7 @@ function dutyPay(duty, context=state.duties) {
     if(candidates.length) {const [kind,value]=candidates.reduce((a,b)=>b[1]>a[1]?b:a);part[kind]+=m/60*value;}
     for(const key of Object.keys(part)){detail.supplements[key]+=part[key];supplements[key]+=part[key];}
     if(rules.midnight) {
-      const item=midnightByEntry.get(entry.id)||{minutes:0,work:0,extras:0};
+      const item=midnightByEntry.get(entry.id)||{minutes:0,work:0,extras:0,rate:r.workHourlyRate};
       item.minutes+=m;item.work+=m/60*r.workHourlyRate;item.extras+=Object.values(part).reduce((a,b)=>a+b,0);midnightByEntry.set(entry.id,item);
     }
   });
@@ -401,13 +420,14 @@ function dutyPay(duty, context=state.duties) {
   if(duration>24) reasons.push('Dienst über 24 Stunden: Pauschalenanzahl ungeklärt; bisherige Starttagspauschale als Vergleichswert');
   if(duty.date>'2026-12-31') reasons.push('Tarifstand ab 2027 noch nicht verifiziert');
   const midnightRatedMinutes=buckets.midnight>0?Math.max(60,buckets.midnight):0;
-  // Sonderrundung nur für Überstundenentgelt; Zeitzuschlagszeiten bleiben tatsächlich.
-  // 50 % umfasst Überstundenentgelt UND die darauf entfallenden Zeitzuschläge.
+  // Die geprüfte Abrechnung rundet die bewerteten 50%-Stunden je Einsatz auf
+  // zwei Dezimalstellen, bevor der Stundenwert angewandt wird (AiRB-Lohnart).
+  // Zeitzuschlagszeiten bleiben davon unberührt.
   const midnightScale=buckets.midnight>0?midnightRatedMinutes/buckets.midnight:0;
   let specialRB=0;
   for(const detail of entryDetails) {
     const night=midnightByEntry.get(detail.id);
-    if(night) detail.specialRB=.5*night.work*midnightScale;
+    if(night) detail.specialRB=cents(cents(.5*night.work*midnightScale/night.rate)*night.rate);
     specialRB+=detail.specialRB;
   }
   // Lohnarten der geprüften Abrechnung: Zusatz AiRB (2029) führt den

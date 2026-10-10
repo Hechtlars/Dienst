@@ -1,6 +1,6 @@
 {
   "host": "Node production-script VM, Europe/Berlin",
-  "passed": 74,
+  "passed": 77,
   "failed": 0,
   "checks": [
     "Telefonpool 20 Minuten = 1 Stunde",
@@ -15,7 +15,10 @@
     "Feiertag mit FZA 35 %",
     "Nacht nur tatsächliche 10 Minuten",
     "Zusatz AiRB 50 % separat von Zeitlohnarten",
-    "Sonder-RB 70 Minuten ohne weitere Rundung",
+    "Sonder-RB rundet bewertete Stunden vor Stundenwert",
+    "Migration ergänzt belegte August-2026-Basis ohne alte Periode zu ändern",
+    "Migration überschreibt abweichendes Profil nicht",
+    "August AiRB ergibt Abrechnungsbetrag 83,06 EUR",
     "Mitternachtsgrenze",
     "Historisch Nacht erst 21 Uhr",
     "Historisch 15 %",
