@@ -1,4 +1,4 @@
-# Dienst – Version 7.41
+# Dienst – Version 7.42
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.42 macht die bisherige Option verständlich und direkt erreichbar: „Vergütung anzeigen“ blendet alle Berechnungen und Beträge in den Dienst- und Monatsansichten gerätebezogen ein oder aus. Tarifwerte und die vorhandene Historie bleiben dabei gespeichert. PWA-Cache auf 7.42 erhöht.
 
 - Version 7.41 richtet direkte Updates mit vorgeschalteten Prüfungen und anschließender Live-Kontrolle ein. Eine fehlgeschlagene Updateprüfung beim Offline-Neustart wird abgefangen. Der Fehler wurde durch die echte Browserprüfung gefunden; PWA-Cache auf 7.41 erhöht.
 

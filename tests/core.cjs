@@ -64,6 +64,9 @@ const uiChecks=vm.runInContext(`(function(){
  currentView='monat';selectedMonth=new Date(2026,9,1);renderMonth();check('Übersicht erzeugt Vergütung und Abgleich',main.innerHTML.includes('payrollComparison')&&main.innerHTML.includes('Rufbereitschaft'));
  renderDutyDetail(state.duties[0].id);check('Detail erzeugt Einzelvergütung',main.innerHTML.includes('entry-pay')&&main.innerHTML.includes('RB-Staffel'));
  openMenu();check('Einstellungen enthalten bestätigte FZA-Auswahl',modalContent.innerHTML.includes('Mit Freizeitausgleich (35 %)')&&modalContent.innerHTML.includes('Gruppe II'));
+ check('Vergütungsschalter ist direkt und verständlich erreichbar',modalContent.innerHTML.includes('Vergütung anzeigen')&&!modalContent.innerHTML.includes('Stundenlohn anzeigen'));
+ const payToggle=document.getElementById('showPayToggle');payToggle.checked=false;payToggle.onchange();check('Vergütungsschalter blendet Berechnung direkt aus',state.settings.showPay===false&&document.getElementById('paySettings').hidden===true);
+ payToggle.checked=true;payToggle.onchange();check('Vergütungsschalter schaltet Berechnung wieder ein',state.settings.showPay===true&&document.getElementById('paySettings').hidden===false);
  check('Abrechnungsmonat Jahreswechsel',payrollDefaultPaymentMonth(new Date(2026,11,1))==='2027-01');
  return result;
 })()`,context);

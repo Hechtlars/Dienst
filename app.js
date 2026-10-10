@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.41';
+const APP_VERSION = '7.42';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -1162,6 +1162,11 @@ function openMenu() {
     <div class="modal-title">Mehr</div>
     <div class="modal-section-title">Einstellungen</div>
     <label class="settings-toggle-row">
+      <span><strong>Vergütung anzeigen</strong><small>Berechnung und Beträge in Dienst- und Monatsansicht ein- oder ausblenden</small></span>
+      <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <label class="settings-toggle-row">
       <span><strong>Individuelle Dienstzeiten</strong><small>Start- und Endzeit für jeden Wochentag selbst festlegen</small></span>
       <input id="showCustomDutyTimesToggle" class="switch-input" type="checkbox" ${settings.showCustomDutyTimes ? 'checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
@@ -1170,11 +1175,6 @@ function openMenu() {
       <span>Erweiterte Optionen</span><span class="advanced-options-chevron">›</span>
     </button>
     <div id="advancedOptions" class="advanced-options" hidden>
-      <label class="settings-toggle-row">
-        <span><strong>Stundenlohn anzeigen</strong><small>Optionale Vergütungsberechnung</small></span>
-        <input id="showPayToggle" class="switch-input" type="checkbox" ${settings.showPay ? 'checked' : ''}>
-        <span class="switch" aria-hidden="true"></span>
-      </label>
       <label class="settings-toggle-row">
         <span><strong>Zeitstrahl anzeigen</strong><small>Optionale Fortschrittsanzeige des aktuellen Dienstes</small></span>
         <input id="showTimelineToggle" class="switch-input" type="checkbox" ${settings.showTimeline ? 'checked' : ''}>
@@ -1254,12 +1254,10 @@ function openMenu() {
     render();
   };
   toggle.onchange = () => {
+    state.settings.showPay = toggle.checked;
+    saveState();
     paySettings.hidden = !toggle.checked;
-    if (!toggle.checked) {
-      state.settings.showPay = false;
-      saveState();
-      render();
-    }
+    render();
   };
   document.getElementById('fillReference').onclick=()=>{
     const r=referenceRates(document.getElementById('rateValidFrom').value,document.getElementById('tariffGroup').value);

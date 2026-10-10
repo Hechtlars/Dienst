@@ -1,6 +1,6 @@
 {
   "host": "Node production-script VM, Europe/Berlin",
-  "passed": 70,
+  "passed": 73,
   "failed": 0,
   "checks": [
     "Telefonpool 20 Minuten = 1 Stunde",
@@ -72,6 +72,9 @@
     "Übersicht erzeugt Vergütung und Abgleich",
     "Detail erzeugt Einzelvergütung",
     "Einstellungen enthalten bestätigte FZA-Auswahl",
+    "Vergütungsschalter ist direkt und verständlich erreichbar",
+    "Vergütungsschalter blendet Berechnung direkt aus",
+    "Vergütungsschalter schaltet Berechnung wieder ein",
     "Abrechnungsmonat Jahreswechsel"
   ]
 }
