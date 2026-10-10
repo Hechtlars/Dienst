@@ -1,1 +1,626 @@
-{"status":"NOT_RUN","reason":"Browser executable unavailable; browser download and cloud-browser test could not be completed. No real-browser results claimed."}
+[
+  {
+    "name": "chromium-1280 Telefonpool 20 Minuten = 1 Stunde",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Telefonpool Einzelanteile",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Haus einzeln 10 + 70 = 3 Stunden",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Mo-Pauschale Faktor 2",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Sa-Pauschale Faktor 4",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 NRW Feiertagspauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 NRW bewegliche Feiertage",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Karfreitag nicht Ostersonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Nutzerkorrektur FZA historisch ohne Änderung der Stundensätze",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Feiertag mit FZA 35 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Nacht nur tatsächliche 10 Minuten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Zusatz AiRB 50 % separat von Zeitlohnarten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Sonder-RB 70 Minuten ohne weitere Rundung",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Mitternachtsgrenze",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Historisch Nacht erst 21 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Historisch 15 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Ab Oktober 20 Uhr und 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Historisch Samstag 0,64 EUR bis 21",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Samstag ab Oktober 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Feiertag ohne FZA schlägt Sonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 24 Dezember ab 6 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Ab 2027 verifiziert nicht behauptet",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 11,5 Stunden = 12 angefangene x 12,5 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 12 Stunden = Tagespauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 13. RB ohne Staffel",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 14. und 16. RB 10 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 17. RB 20 % und 20. 30 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Staffelbasis inkl Pauschale und §7.3-Einsatz",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Staffel unabhängig von Speicherreihenfolge",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Unvollständiger Monat: Staffel ausgeschlossen",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 50 % Grenze 7, Zuschlag ab 8",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Gehaltsabgleich gleiche Engine",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Monat cents Komponenten ergeben Gesamt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Einzelanteile ergeben Dienst abzüglich Pauschalenanteil",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Migration erhält Einträge exakt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Migration erhält Historie und unbekannte Daten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Migration idempotent",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Historische Dienstzeiten bleiben",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Backup Rundlauf valid",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Defektes Backup abgelehnt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Vor erster Tarifperiode kein zukünftiger Satz",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Referenz NRW erster Schritt November",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Referenz Facharzt Basis",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Referenz EG I eigenständig",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Unbekannter Zuschlag nicht hinzugefügt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 Tarif, Rechnung, Migration",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI Tarifparameter speichern",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI Dienst und Einsatz anlegen/bearbeiten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI Abgleich speichern und Folgemonat",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI CSV / PDF / Backup exportieren und importieren",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI Foto Ausschnitt und Speicherung",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-1280 UI Breite, Fehlerfreiheit und Offline",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Telefonpool 20 Minuten = 1 Stunde",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Telefonpool Einzelanteile",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Haus einzeln 10 + 70 = 3 Stunden",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Mo-Pauschale Faktor 2",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Sa-Pauschale Faktor 4",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 NRW Feiertagspauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 NRW bewegliche Feiertage",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Karfreitag nicht Ostersonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Nutzerkorrektur FZA historisch ohne Änderung der Stundensätze",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Feiertag mit FZA 35 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Nacht nur tatsächliche 10 Minuten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Zusatz AiRB 50 % separat von Zeitlohnarten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Sonder-RB 70 Minuten ohne weitere Rundung",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Mitternachtsgrenze",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Historisch Nacht erst 21 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Historisch 15 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Ab Oktober 20 Uhr und 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Historisch Samstag 0,64 EUR bis 21",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Samstag ab Oktober 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Feiertag ohne FZA schlägt Sonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 24 Dezember ab 6 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Ab 2027 verifiziert nicht behauptet",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 11,5 Stunden = 12 angefangene x 12,5 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 12 Stunden = Tagespauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 13. RB ohne Staffel",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 14. und 16. RB 10 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 17. RB 20 % und 20. 30 %",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Staffelbasis inkl Pauschale und §7.3-Einsatz",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Staffel unabhängig von Speicherreihenfolge",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Unvollständiger Monat: Staffel ausgeschlossen",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 50 % Grenze 7, Zuschlag ab 8",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Gehaltsabgleich gleiche Engine",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Monat cents Komponenten ergeben Gesamt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Einzelanteile ergeben Dienst abzüglich Pauschalenanteil",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Migration erhält Einträge exakt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Migration erhält Historie und unbekannte Daten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Migration idempotent",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Historische Dienstzeiten bleiben",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Backup Rundlauf valid",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Defektes Backup abgelehnt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Vor erster Tarifperiode kein zukünftiger Satz",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Referenz NRW erster Schritt November",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Referenz Facharzt Basis",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Referenz EG I eigenständig",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Unbekannter Zuschlag nicht hinzugefügt",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 Tarif, Rechnung, Migration",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI Tarifparameter speichern",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI Dienst und Einsatz anlegen/bearbeiten",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI Abgleich speichern und Folgemonat",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI CSV / PDF / Backup exportieren und importieren",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI Foto Ausschnitt und Speicherung",
+    "status": "PASS"
+  },
+  {
+    "name": "chromium-390 UI Breite, Fehlerfreiheit und Offline",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Telefonpool 20 Minuten = 1 Stunde",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Telefonpool Einzelanteile",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Haus einzeln 10 + 70 = 3 Stunden",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Mo-Pauschale Faktor 2",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Sa-Pauschale Faktor 4",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 NRW Feiertagspauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 NRW bewegliche Feiertage",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Karfreitag nicht Ostersonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Nutzerkorrektur FZA historisch ohne Änderung der Stundensätze",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Feiertag mit FZA 35 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Nacht nur tatsächliche 10 Minuten",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Zusatz AiRB 50 % separat von Zeitlohnarten",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Sonder-RB 70 Minuten ohne weitere Rundung",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Mitternachtsgrenze",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Historisch Nacht erst 21 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Historisch 15 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Ab Oktober 20 Uhr und 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Historisch Samstag 0,64 EUR bis 21",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Samstag ab Oktober 20 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Feiertag ohne FZA schlägt Sonntag",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 24 Dezember ab 6 Uhr",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Ab 2027 verifiziert nicht behauptet",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 11,5 Stunden = 12 angefangene x 12,5 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 12 Stunden = Tagespauschale",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 13. RB ohne Staffel",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 14. und 16. RB 10 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 17. RB 20 % und 20. 30 %",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Staffelbasis inkl Pauschale und §7.3-Einsatz",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Staffel unabhängig von Speicherreihenfolge",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Unvollständiger Monat: Staffel ausgeschlossen",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 50 % Grenze 7, Zuschlag ab 8",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Gehaltsabgleich gleiche Engine",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Monat cents Komponenten ergeben Gesamt",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Einzelanteile ergeben Dienst abzüglich Pauschalenanteil",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Migration erhält Einträge exakt",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Migration erhält Historie und unbekannte Daten",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Migration idempotent",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Historische Dienstzeiten bleiben",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Backup Rundlauf valid",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Defektes Backup abgelehnt",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Vor erster Tarifperiode kein zukünftiger Satz",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Referenz NRW erster Schritt November",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Referenz Facharzt Basis",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Referenz EG I eigenständig",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Unbekannter Zuschlag nicht hinzugefügt",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 Tarif, Rechnung, Migration",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI Tarifparameter speichern",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI Dienst und Einsatz anlegen/bearbeiten",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI Abgleich speichern und Folgemonat",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI CSV / PDF / Backup exportieren und importieren",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI Foto Ausschnitt und Speicherung",
+    "status": "PASS"
+  },
+  {
+    "name": "webkit-390 UI Breite, Fehlerfreiheit und Offline",
+    "status": "PASS"
+  }
+]
