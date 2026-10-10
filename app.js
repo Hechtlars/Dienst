@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.40';
+const APP_VERSION = '7.41';
 const DEFAULT_DUTY_TIMES = {
   0: { start: '08:30', end: '07:15' }, // Sonntag
   1: { start: '07:15', end: '07:15' }, // Montag
@@ -1459,7 +1459,9 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('./service-worker.js');
-      registration.update();
+      // Eine fehlende Verbindung darf den Offline-Neustart nicht mit einer
+      // unbehandelten Promise-Rejection abbrechen. Updates werden online geprüft.
+      if (navigator.onLine) registration.update().catch(() => {});
       if (registration.waiting) showUpdate(registration.waiting);
       registration.addEventListener('updatefound', () => {
         const worker = registration.installing;
