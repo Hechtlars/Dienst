@@ -18,7 +18,11 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
     try {
       const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'Europe/Berlin'});
       const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-      await page.goto(base);
+      await page.goto(base,{waitUntil:'load'});
+      // Beim ersten Aufruf kann die neue Service-Worker-Version die Seite einmal
+      // kontrolliert neu laden. Erst nach dieser Aktivierung wird die Live-UI bedient.
+      await page.waitForTimeout(1200);
+      await page.waitForLoadState('domcontentloaded');
       assert.equal(await page.evaluate(()=>APP_VERSION),version);
       await page.click('#newDuty');
       assert.equal(await page.locator('#modalContent input[type="datetime-local"]').count(),0);
