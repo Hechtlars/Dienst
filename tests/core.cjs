@@ -27,12 +27,15 @@ const uiChecks=vm.runInContext(`(function(){
  openNewDuty();document.getElementById('dutyDate').value='2026-10-05';
  check('Neuer Dienst fragt nur Datum ab',!modalContent.innerHTML.includes('datetime-local')&&!modalContent.innerHTML.includes('actualDutyStart'));
  document.getElementById('saveDuty').onclick();check('Dienstformular speichert Dienst',state.duties.length===1&&state.duties[0].date==='2026-10-05');
- check('Neue Dienstgrenzen entsprechen Wochentagsvorgabe',dutyStart(state.duties[0]).getHours()===7&&dutyStart(state.duties[0]).getMinutes()===15&&localDateKey(dutyEnd(state.duties[0]))==='2026-10-06');
+ check('Neue Dienstgrenzen entsprechen Wochentagsvorgabe',dutyStart(state.duties[0]).getHours()===15&&dutyStart(state.duties[0]).getMinutes()===45&&localDateKey(dutyEnd(state.duties[0]))==='2026-10-06');
+ openNewDuty();document.getElementById('dutyDate').value='2026-10-09';document.getElementById('dutyDate').onchange({target:{value:'2026-10-09'}});check('Freitag bietet Wochenendblock an',document.getElementById('weekendDutyOption').hidden===false);document.getElementById('addWeekendDuties').checked=true;document.getElementById('saveDuty').onclick();check('Wochenendblock legt drei getrennte Dienste an',state.duties.filter(d=>['2026-10-09','2026-10-10','2026-10-11'].includes(d.date)).length===3);
+ openNewDuty();document.getElementById('dutyDate').value='2026-10-12';document.getElementById('dutyDate').onchange({target:{value:'2026-10-12'}});check('Werktag bietet keinen Wochenendblock an',document.getElementById('weekendDutyOption').hidden===true);
+ state.duties=state.duties.filter(d=>d.date==='2026-10-05');
  const savedDuty=state.duties[0];
  openNewDuty();document.getElementById('dutyDate').value='';document.getElementById('saveDuty').onclick();check('Fehlendes Datum legt keinen Dienst an',state.duties.length===1&&document.getElementById('modalError').textContent.includes('Datum'));
  openNewDuty();document.getElementById('dutyDate').value=savedDuty.date;document.getElementById('saveDuty').onclick();check('Doppeltes Datum legt keinen Dienst an',state.duties.length===1&&document.getElementById('modalError').textContent.includes('bereits'));
  for(let day=6;day<=12;day++){
-  const date='2026-10-'+pad(day),startTime=day===10||day===11?'08:30':'07:15',endTime=day===9||day===10?'08:30':'07:15';
+  const date='2026-10-'+pad(day),startTime=day===10||day===11?'10:30':'15:45',endTime=day===9||day===10?'08:30':'07:15';
   openNewDuty();document.getElementById('dutyDate').value=date;document.getElementById('saveDuty').onclick();
   const added=state.duties.find(d=>d.date===date);
   check('Datum allein speichert Wochentag '+parseLocalDate(date).getDay(),added&&added.startOverride===new Date(date+'T'+startTime).toISOString()&&added.endOverride===new Date('2026-10-'+pad(day+1)+'T'+endTime).toISOString());
@@ -43,6 +46,8 @@ const uiChecks=vm.runInContext(`(function(){
  const customDuty=state.duties.find(d=>d.date==='2026-10-13');
  check('Individuelle Dienstzeiten automatisch übernommen',dutyStart(customDuty).getHours()===18&&dutyStart(customDuty).getMinutes()===20&&dutyEnd(customDuty).getHours()===9&&localDateKey(dutyEnd(customDuty))==='2026-10-14'&&document.getElementById('dutyScheduleNote').textContent.includes('18:20'));
  state.settings.showCustomDutyTimes=false;state.duties=[savedDuty];
+ const today=localDateKey(new Date());const plannedDuty={id:'planned',date:today,...scheduledDutyBounds(today),entries:[]};state.duties=[plannedDuty];const morning=new Date(today+'T08:30');check('Heutiger späterer Dienst wird morgens angezeigt',homeDuty(morning).duty===plannedDuty&&homeDuty(morning).planned===true);
+ state.duties=[savedDuty];
  openNewEntry(state.duties[0].id);document.getElementById('entryDate').value='2026-10-06';document.getElementById('entryStart').value='03:00';document.getElementById('entryEnd').value='03:10';document.getElementById('entryNote').value='Regression';document.getElementById('entryPatientIdPhoto').value='';
  document.getElementById('saveEntry').onclick();check('Einsatzformular speichert Nacht dem Dienst zu',state.duties[0].entries.length===1&&minutes(state.duties[0].entries[0])===10);
  const prior=JSON.stringify(savedDuty.entries),startBound=savedDuty.startOverride,endBound=savedDuty.endOverride;
@@ -52,7 +57,7 @@ const uiChecks=vm.runInContext(`(function(){
  check('Unverändertes Datum erhält Einsätze und gespeicherte Grenzen',JSON.stringify(savedDuty.entries)===prior&&savedDuty.startOverride===startBound&&savedDuty.endOverride===endBound);
  state.settings.showCustomDutyTimes=false;
  openEditDuty(savedDuty.id);document.getElementById('dutyDate').value='2026-10-07';document.getElementById('saveDuty').onclick();
- check('Datumänderung verschiebt Einsätze und erhält IDs',savedDuty.date==='2026-10-07'&&localDateKey(new Date(savedDuty.entries[0].start))==='2026-10-08'&&savedDuty.entries[0].id===JSON.parse(prior)[0].id&&savedDuty.startOverride===new Date('2026-10-07T07:15').toISOString());
+ check('Datumänderung verschiebt Einsätze und erhält IDs',savedDuty.date==='2026-10-07'&&localDateKey(new Date(savedDuty.entries[0].start))==='2026-10-08'&&savedDuty.entries[0].id===JSON.parse(prior)[0].id&&savedDuty.startOverride===new Date('2026-10-07T15:45').toISOString());
  openEditDuty(savedDuty.id);document.getElementById('dutyDate').value='2026-10-05';document.getElementById('saveDuty').onclick();
  check('Datumänderung rückwärts erhält Einsatzinhalt',JSON.stringify(savedDuty.entries)===prior);
  state.settings.showCustomDutyTimes=true;state.settings.dutyTimes[4]={start:'07:15',end:'02:00'};

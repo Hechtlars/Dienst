@@ -95,6 +95,9 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    await page.locator('#saveDuty').scrollIntoViewIfNeeded();
    assert.ok(await page.evaluate(()=>{const b=document.getElementById('saveDuty').getBoundingClientRect(),r=document.getElementById('modalContent').getBoundingClientRect();return b.top>=r.top&&b.bottom<=r.bottom+1;}),'Speichern muss im Dialog erreichbar sein');
    await page.click('#saveDuty');
+   assert.equal(await page.evaluate(()=>{const d=state.duties.find(item=>item.date==='2026-10-05');return `${fmtTime(dutyStart(d))}/${fmtTime(dutyEnd(d))}`;}),'15:45/07:15');
+   await page.click('#newDuty');await page.fill('#dutyDate','2026-10-09');await page.dispatchEvent('#dutyDate','change');assert.equal(await page.locator('#weekendDutyOption').isVisible(),true);await page.check('#addWeekendDuties');await page.click('#saveDuty');assert.equal(await page.evaluate(()=>state.duties.filter(d=>['2026-10-09','2026-10-10','2026-10-11'].includes(d.date)).length),3);
+   assert.equal(await page.evaluate(()=>{const saturday=state.duties.find(d=>d.date==='2026-10-10'),sunday=state.duties.find(d=>d.date==='2026-10-11');return fmtTime(dutyStart(saturday))+'/'+fmtTime(dutyStart(sunday));}),'10:30/10:30');
    await page.click('[data-view="monat"]');await page.evaluate(()=>{selectedMonth=new Date(2026,9,1);renderMonth();});await page.click('[data-kind="duty"] .swipe-content');await page.click('#newHistoricalEntry');
    await page.fill('#entryDate','2026-10-06');await page.fill('#entryStart','03:00');await page.fill('#entryEnd','03:10');await page.fill('#entryNote','Test');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/50,96/);
    await page.click('[data-kind="entry"] .swipe-content');await page.fill('#entryNote','Bearbeitet');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/Bearbeitet/);

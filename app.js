@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.44';
+const APP_VERSION = '7.46';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -16,13 +16,13 @@ function normalizeTariffStage(group, value) { const stage = Number(value); retur
 function tariffGroupOptions(selected) { return Object.entries(TARIFF_GROUPS).map(([id, group]) => `<option value="${id}" ${id === normalizeTariffGroup(selected) ? 'selected' : ''}>Gruppe ${id} · ${group.label}</option>`).join(''); }
 function tariffStageOptions(group, selected) { const normalizedGroup = normalizeTariffGroup(group), normalizedStage = normalizeTariffStage(normalizedGroup, selected); return Array.from({ length: TARIFF_GROUPS[normalizedGroup].stages }, (_, index) => { const stage = index + 1; return `<option value="${stage}" ${stage === normalizedStage ? 'selected' : ''}>Stufe ${stage}</option>`; }).join(''); }
 const DEFAULT_DUTY_TIMES = {
-  0: { start: '08:30', end: '07:15' }, // Sonntag
-  1: { start: '07:15', end: '07:15' }, // Montag
-  2: { start: '07:15', end: '07:15' }, // Dienstag
-  3: { start: '07:15', end: '07:15' }, // Mittwoch
-  4: { start: '07:15', end: '07:15' }, // Donnerstag
-  5: { start: '07:15', end: '08:30' }, // Freitag
-  6: { start: '08:30', end: '08:30' }  // Samstag
+  0: { start: '10:30', end: '07:15' }, // Sonntag
+  1: { start: '15:45', end: '07:15' }, // Montag
+  2: { start: '15:45', end: '07:15' }, // Dienstag
+  3: { start: '15:45', end: '07:15' }, // Mittwoch
+  4: { start: '15:45', end: '07:15' }, // Donnerstag
+  5: { start: '15:45', end: '08:30' }, // Freitag
+  6: { start: '10:30', end: '08:30' }  // Samstag
 };
 const WEEKDAY_NAMES = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const state = loadState();
@@ -519,6 +519,13 @@ function openPayrollComparison() {
 }
 function sortedDuties() { return [...state.duties].sort((a, b) => dutyStart(b) - dutyStart(a)); }
 function activeDuty() { const now = new Date(); return sortedDuties().find(duty => dutyStart(duty) <= now && now < dutyEnd(duty)); }
+function homeDuty(now = new Date()) {
+  const active=sortedDuties().find(duty=>dutyStart(duty)<=now&&now<dutyEnd(duty));
+  if(active) return {duty:active,planned:false};
+  const today=localDateKey(now);
+  const planned=state.duties.find(duty=>duty.date===today&&dutyStart(duty)>now);
+  return planned ? {duty:planned,planned:true} : {duty:null,planned:false};
+}
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
 function monthDuties() {
   return sortedDuties().filter(duty => {
@@ -595,8 +602,8 @@ function goHome() {
 // beim Wiederkehren in die App und regelmäßig erneut.
 let lastDutySignature = '';
 function dutyViewSignature() {
-  const duty = activeDuty();
-  return duty ? `${duty.id}|${duty.date}|${duty.entries.length}|${sum(duty, 'Telefonisch')}|${sum(duty, 'Im Haus')}` : 'none';
+  const {duty,planned}=homeDuty();
+  return duty ? `${duty.id}|${planned?'planned':'active'}|${duty.date}|${duty.entries.length}|${sum(duty, 'Telefonisch')}|${sum(duty, 'Im Haus')}` : 'none';
 }
 function refreshTimeSensitiveView(force = false) {
   if (document.visibilityState === 'hidden') return;
@@ -613,7 +620,7 @@ function refreshTimeSensitiveView(force = false) {
 function renderDuty() {
   title.textContent = 'Dienst';
   subtitle.textContent = 'Rufbereitschaft erfassen';
-  const duty = activeDuty();
+  const {duty,planned}=homeDuty();
   lastDutySignature = dutyViewSignature();
   if (!duty) {
     main.innerHTML = `
@@ -632,10 +639,10 @@ function renderDuty() {
   const houseMinutes = sum(duty, 'Im Haus');
   main.innerHTML = `
     <section class="card hero">
-      <div class="hero-kicker">Aktuelle Rufbereitschaft</div>
+      <div class="hero-kicker">${planned?'Heutige Rufbereitschaft geplant':'Aktuelle Rufbereitschaft'}</div>
       <div class="hero-date">${fmtDate(dutyStart(duty))}</div>
       <div class="hero-time">${dutyTimeText(duty)}</div>
-      ${timelineHtml(duty)}
+      ${planned?`<div class="small-note">Beginnt heute um ${fmtTime(dutyStart(duty))} Uhr.</div>`:timelineHtml(duty)}
     </section>
     <button class="action-button duty-edit-button" id="editActiveDuty" type="button">Dienst bearbeiten</button>
     <section class="stats">
@@ -957,6 +964,11 @@ function openEntryContextMenu(dutyId, entryId) {
 function scheduledDutyBounds(date) {
   return {startOverride:dutyStart({date}).toISOString(),endOverride:dutyEnd({date}).toISOString()};
 }
+function weekendDutyDates(startDate) {
+  const start=parseLocalDate(startDate);
+  if(start.getDay()!==5) return [startDate];
+  return [0,1,2].map(offset=>{const date=new Date(start);date.setDate(date.getDate()+offset);return localDateKey(date);});
+}
 function openNewDuty() {
   modal.classList.add('duty-date-dialog');
   const now = new Date();
@@ -965,22 +977,32 @@ function openNewDuty() {
     <div class="modal-title">Neuer Dienst</div>
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${initialDate}"></label>
     <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(initialDate)}.</div>
+    <label class="settings-toggle-row" id="weekendDutyOption" hidden><span>Samstag und Sonntag ebenfalls anlegen<br><small>Drei getrennte Dienste – jeweils einzeln gezählt und berechnet.</small></span><input type="checkbox" id="addWeekendDuties"></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
+  const updateWeekendOption=date=>{
+    const option=document.getElementById('weekendDutyOption'), toggle=document.getElementById('addWeekendDuties');
+    const isFriday=date&&parseLocalDate(date).getDay()===5;
+    option.hidden=!isFriday;
+    if(!isFriday) toggle.checked=false;
+  };
+  updateWeekendOption(initialDate);
   document.getElementById('dutyDate').onchange = event => {
     if (event.target.value) document.getElementById('dutyScheduleNote').textContent = `Dienstzeit: ${scheduleText(event.target.value)}.`;
+    updateWeekendOption(event.target.value);
   };
   document.getElementById('saveDuty').onclick = () => {
     const date = document.getElementById('dutyDate').value;
     if (!date) { document.getElementById('modalError').textContent = 'Bitte ein Datum auswählen.'; return; }
-    if (state.duties.some(duty => duty.date === date)) {
-      document.getElementById('modalError').textContent = 'Für dieses Datum gibt es bereits einen Dienst.';
+    const dates=document.getElementById('addWeekendDuties').checked?weekendDutyDates(date):[date];
+    const existing=dates.filter(candidate=>state.duties.some(duty=>duty.date===candidate));
+    if (existing.length) {
+      document.getElementById('modalError').textContent = existing.length===1 ? `Für den ${fmtShortDate(parseLocalDate(existing[0]))} gibt es bereits einen Dienst.` : 'Mindestens einer der Wochenenddienste existiert bereits. Es wurde nichts angelegt.';
       return;
     }
-    const bounds=scheduledDutyBounds(date);
-    state.duties.push({ id: uid(), date, ...bounds, entries: [] });
+    for(const dutyDate of dates) state.duties.push({id:uid(),date:dutyDate,...scheduledDutyBounds(dutyDate),entries:[]});
     saveState();
     modal.close();
     currentView = 'dienst';
