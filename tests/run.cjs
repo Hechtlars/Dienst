@@ -113,7 +113,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
   });
   // Confirm dialog for delete handled explicitly, then undo.
   if(await page.evaluate(()=>state.duties.length)){
-   page.once('dialog',d=>d.accept());await page.evaluate(()=>deleteDutyById(state.duties[0].id));await page.click('#undoToastButton');assert.equal(await page.evaluate(()=>state.duties.length),1);
+   const dutyCount=await page.evaluate(()=>state.duties.length);page.once('dialog',d=>d.accept());await page.evaluate(()=>deleteDutyById(state.duties[0].id));await page.click('#undoToastButton');assert.equal(await page.evaluate(()=>state.duties.length),dutyCount);
   }
   await page.click('#homeButton');assert.match(await page.textContent('#mainContent'),/Kein aktiver Dienst|Aktuelle Rufbereitschaft/);
   await run(label+' UI Foto Ausschnitt und Speicherung',async()=>{
