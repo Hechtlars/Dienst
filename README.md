@@ -1,4 +1,4 @@
-# Dienst – Version 7.46
+# Dienst – Version 7.47
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.47 entfernt den Button „Dienst bearbeiten“ von der Startseite und verschiebt den Speicherhinweis in „Mehr → Datensicherung“. Bearbeiten bleibt in der Monatsübersicht und Dienstdetailansicht erreichbar.
 
 - Version 7.46 setzt die Standard-Anfangszeiten für neue Dienste auf Montag bis Freitag 15:45 Uhr sowie Samstag und Sonntag 10:30 Uhr. Bereits gespeicherte Dienste und individuell konfigurierte Zeiten bleiben unverändert. Ein für heute angelegter, aber noch nicht begonnener Dienst wird auf der Startseite als „Heutige Rufbereitschaft geplant“ mit Beginnzeit angezeigt. PWA-Cache auf 7.46 erhöht.
 

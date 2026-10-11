@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.46';
+const APP_VERSION = '7.47';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -630,7 +630,7 @@ function renderDuty() {
         <div class="empty-text">Lege einen Dienst an. Die Start- und Endzeit wird automatisch passend zum Wochentag berechnet.</div>
       </section>
       <button class="primary" id="newDuty" type="button">Neuen Dienst anlegen</button>
-      ${privacyNote()}`;
+`;
     document.getElementById('newDuty').onclick = openNewDuty;
     return;
   }
@@ -644,7 +644,6 @@ function renderDuty() {
       <div class="hero-time">${dutyTimeText(duty)}</div>
       ${planned?`<div class="small-note">Beginnt heute um ${fmtTime(dutyStart(duty))} Uhr.</div>`:timelineHtml(duty)}
     </section>
-    <button class="action-button duty-edit-button" id="editActiveDuty" type="button">Dienst bearbeiten</button>
     <section class="stats">
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
       <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(houseRoundedHours(duty))} gerundet</div></div>
@@ -653,8 +652,7 @@ function renderDuty() {
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
     ${state.settings.showPay ? payDetailCard(duty) : ''}
-    ${privacyNote()}`;
-  document.getElementById('editActiveDuty').onclick = () => openEditDuty(duty.id);
+`;
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   bindInteractiveEntries();
   bindTimelineBoost();
@@ -1371,6 +1369,7 @@ function openMenu() {
 function openBackupMenu() {
   modalContent.innerHTML = `<div class="modal-body">
     <div class="modal-title backup-title">Datensicherung <button type="button" class="info-button" id="backupInfo" aria-label="Information zur Datensicherung">i</button></div>
+    ${privacyNote()}
     <button type="button" class="secondary-button" id="exportBackup">Sicherung exportieren</button>
     <button type="button" class="secondary-button" id="importBackup">Sicherung importieren</button>
     <div class="small-note">Die Sicherungsdatei wird von dir selbst gespeichert. Es erfolgt kein automatischer Cloud-Upload.</div>
