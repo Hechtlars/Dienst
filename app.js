@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.48';
+const APP_VERSION = '7.49';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -1552,9 +1552,10 @@ showBackupReminder();
 render();
 
 
-// Version 6.1: Aktion-Menüs durch Tippen auf den abgedunkelten Hintergrund schließen.
+// Ein Tipp auf den sichtbaren, abgedunkelten Hintergrund verwirft den geöffneten
+// Dialog wie „Abbrechen“. Gespeichert wird ausschließlich über die Speichern-Buttons.
 modal.addEventListener('click', event => {
-  if (event.target === modal && modal.classList.contains('action-sheet-open')) {
+  if (event.target === modal) {
     modal.close();
   }
 });

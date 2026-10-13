@@ -1,6 +1,6 @@
 {
   "name": "dienst-rufbereitschaft",
-  "version": "7.48.0",
+  "version": "7.49.0",
   "private": true,
   "scripts": {
     "test": "node tests/core.cjs",

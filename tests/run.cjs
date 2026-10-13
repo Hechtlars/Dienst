@@ -91,6 +91,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    await page.locator('#modalContent .modal-body > .secondary-button').last().click();
   });
   await run(label+' UI Dienst und Einsatz anlegen/bearbeiten',async()=>{
+   await page.click('#newDuty');assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),true);await page.mouse.click(4,4);assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),false,'Tipp auf den abgedunkelten Rand bricht den Dialog ab');
    await page.click('#newDuty');assert.equal(await page.locator('#modalContent input[type="datetime-local"]').count(),0);await page.fill('#dutyDate','2026-10-05');await page.dispatchEvent('#dutyDate','change');
    await page.locator('#saveDuty').scrollIntoViewIfNeeded();
    assert.ok(await page.evaluate(()=>{const b=document.getElementById('saveDuty').getBoundingClientRect(),r=document.getElementById('modalContent').getBoundingClientRect();return b.top>=r.top&&b.bottom<=r.bottom+1;}),'Speichern muss im Dialog erreichbar sein');

@@ -1,4 +1,4 @@
-# Dienst – Version 7.48
+# Dienst – Version 7.49
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.49 schließt jeden offenen App-Dialog bei Tipp auf den sichtbaren abgedunkelten Rand. Das entspricht „Abbrechen“; es werden keine Eingaben gespeichert. PWA-Cache auf 7.49 erhöht.
 
 - Version 7.48 zeigt die Auswahl „Gesamtes Wochenende anlegen“ ausschließlich bei Freitag, Samstag oder Sonntag. Sie legt Freitag bis Sonntag als drei getrennte Dienste an; an Werktagen bleibt sie vollständig verborgen. Die iPhone-Darstellung der Auswahl ist kompakt korrigiert. PWA-Cache auf 7.48 erhöht.
 
