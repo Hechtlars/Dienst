@@ -1,6 +1,6 @@
 {
   "host": "Node production-script VM, Europe/Berlin",
-  "passed": 81,
+  "passed": 85,
   "failed": 0,
   "checks": [
     "Telefonpool 20 Minuten = 1 Stunde",
@@ -57,6 +57,10 @@
     "Neue Dienstgrenzen entsprechen Wochentagsvorgabe",
     "Freitag bietet Wochenendblock an",
     "Wochenendblock legt drei getrennte Dienste an",
+    "Samstag bietet Wochenendblock an",
+    "Samstagauswahl bildet Freitag bis Sonntag",
+    "Sonntag bietet Wochenendblock an",
+    "Sonntagauswahl bildet Freitag bis Sonntag",
     "Werktag bietet keinen Wochenendblock an",
     "Fehlendes Datum legt keinen Dienst an",
     "Doppeltes Datum legt keinen Dienst an",
