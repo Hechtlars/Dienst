@@ -63,8 +63,6 @@ main { width: min(720px, 100%); margin: 0 auto; padding: 8px 16px 28px; }
 .month-stat-value { margin-top: 5px; font-size: 20px; font-weight: 800; color: #15171a; }
 .primary { width: 100%; border: 0; border-radius: 15px; background: var(--accent); color: #fff; font-weight: 700; padding: 15px 18px; margin: 12px 0; box-shadow: 0 7px 18px rgba(10,108,255,.23); }
 .primary:active { transform: scale(.985); }
-.house-entry-pending { color: var(--secondary); cursor: default; opacity: .78; }
-.house-entry-pending:disabled { opacity: .78; }
 .secondary-button { width: 100%; border: 0; border-radius: 14px; background: #e8eaed; color: #15171a; font-weight: 650; padding: 13px 18px; margin: 5px 0; }
 .text-button { border: 0; background: transparent; color: var(--accent); font-weight: 650; padding: 8px 4px; }
 .danger-button { color: var(--red); }

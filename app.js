@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.51';
+const APP_VERSION = '7.52';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -658,15 +658,13 @@ function renderDuty() {
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
       <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(houseRoundedHours(duty))} gerundet</div></div>
     </section>
-    ${runningHouse ? `<button class="primary" id="finishHouseEntry" type="button">✓ Haus-Einsatz beenden</button><div class="small-note running-entry-note">Haus-Einsatz läuft seit ${fmtTime(new Date(runningHouse.start))} Uhr. Fahrt zur Klinik und Rückfahrt sind eingeschlossen.</div>` : planned ? `<button class="action-button house-entry-pending" type="button" disabled>Im Haus ab ${fmtTime(dutyStart(duty))} Uhr möglich</button>` : `<button class="primary" id="startHouseEntry" type="button">+ Im Haus starten</button>`}
-    <button class="action-button" id="newEntry" type="button">+ Telefonat hinzufügen</button>
+    ${runningHouse ? `<button class="primary" id="finishHouseEntry" type="button">✓ Haus-Einsatz beenden</button><div class="small-note running-entry-note">Haus-Einsatz läuft seit ${fmtTime(new Date(runningHouse.start))} Uhr. Fahrt zur Klinik und Rückfahrt sind eingeschlossen.</div>` : `<button class="primary" id="newEntry" type="button">+ Einsatz hinzufügen</button>`}
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
     ${state.settings.showPay ? payDetailCard(duty) : ''}
 `;
-  document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
+  if (!runningHouse) document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   if (runningHouse) document.getElementById('finishHouseEntry').onclick = () => finishHouseEntry(duty.id, runningHouse.id);
-  else if (!planned) document.getElementById('startHouseEntry').onclick = () => startHouseEntry(duty.id);
   bindInteractiveEntries();
   bindTimelineBoost();
 }
@@ -1117,7 +1115,7 @@ function openNewEntry(dutyId) {
     <div class="segment"><button type="button" class="selected" data-type="Telefonisch">Telefonisch</button><button type="button" data-type="Im Haus">Im Haus</button></div>
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(defaultDate)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}"></label>
-    <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
+    <label class="field" id="entryEndField"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(defaultEnd.getHours())}:${pad(defaultEnd.getMinutes())}"></label>
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-photo-entry-row">
         <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1147,10 +1145,16 @@ function openNewEntry(dutyId) {
     if (photoWrap) photoWrap.hidden = false;
   }
   bindPatientIdTools();
+  const updateEntryTypeUi = () => {
+    const house = type === 'Im Haus';
+    document.getElementById('entryEndField').hidden = house;
+    document.getElementById('saveEntry').textContent = house ? 'Im Haus starten' : 'Speichern';
+  };
   for (const button of modalContent.querySelectorAll('[data-type]')) {
     button.onclick = () => {
       type = button.dataset.type;
       for (const item of modalContent.querySelectorAll('[data-type]')) item.classList.toggle('selected', item === button);
+      updateEntryTypeUi();
     };
   }
   document.getElementById('saveEntry').onclick = () => {
@@ -1160,15 +1164,15 @@ function openNewEntry(dutyId) {
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError');
     error.textContent = '';
-    if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
+    if (!date || !startTime || (type === 'Telefonisch' && !endTime)) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
     if (type === 'Im Haus' && openHouseEntry(duty)) { error.textContent = 'Ein Hauseinsatz läuft bereits. Bitte diesen zuerst beenden.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`);
-    const endDate = new Date(`${date}T${endTime}:00`);
-    if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
+    const endDate = type === 'Telefonisch' ? new Date(`${date}T${endTime}:00`) : null;
+    if (endDate && endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
-    if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
+    if (endDate && endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
     const patientIdPhoto = document.getElementById('entryPatientIdPhoto')?.value || '';
-    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), end: endDate.toISOString(), patientIdPhoto, note });
+    duty.entries.push({ id: uid(), type, start: startDate.toISOString(), ...(endDate ? {end:endDate.toISOString()} : {}), patientIdPhoto, note });
     saveState();
     modal.close();
     render();
