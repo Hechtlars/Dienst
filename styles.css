@@ -72,6 +72,7 @@ main { width: min(720px, 100%); margin: 0 auto; padding: 8px 16px 28px; }
 .empty-text { color: var(--secondary); font-size: 14px; line-height: 1.45; margin-top: 6px; }
 .empty { color: var(--secondary); text-align: center; padding: 36px 20px; }
 label.field { display: block; margin: 14px 0; }
+label.field[hidden] { display: none; }
 label.field span { display: block; color: var(--secondary); font-size: 13px; font-weight: 600; margin: 0 0 7px 2px; }
 input, select { width: 100%; min-height: 49px; border: 1px solid var(--line); border-radius: 12px; background: #f8f9fa; padding: 12px; font-size: 17px; color: #111; }
 .segment { display: grid; grid-template-columns: 1fr 1fr; background: #e8eaed; border-radius: 12px; padding: 3px; }
