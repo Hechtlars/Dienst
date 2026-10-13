@@ -1,6 +1,6 @@
 {
   "host": "Node production-script VM, Europe/Berlin",
-  "passed": 88,
+  "passed": 89,
   "failed": 0,
   "checks": [
     "Telefonpool 20 Minuten = 1 Stunde",
@@ -62,6 +62,7 @@
     "Sonntag bietet Wochenendblock an",
     "Sonntagauswahl bildet Freitag bis Sonntag",
     "Werktag bietet keinen Wochenendblock an",
+    "Hauseinsatz vor Dienstbeginn wird still nicht angelegt",
     "Hauseinsatz startet ohne fiktive Endzeit",
     "Laufender Hauseinsatz wird nicht vergütet",
     "Hauseinsatz beendet sich mit tatsächlicher Endzeit",

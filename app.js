@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.50';
+const APP_VERSION = '7.51';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -658,7 +658,7 @@ function renderDuty() {
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
       <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(houseRoundedHours(duty))} gerundet</div></div>
     </section>
-    ${runningHouse ? `<button class="primary" id="finishHouseEntry" type="button">✓ Haus-Einsatz beenden</button><div class="small-note running-entry-note">Haus-Einsatz läuft seit ${fmtTime(new Date(runningHouse.start))} Uhr. Fahrt zur Klinik und Rückfahrt sind eingeschlossen.</div>` : `<button class="primary" id="startHouseEntry" type="button">+ Im Haus starten</button>`}
+    ${runningHouse ? `<button class="primary" id="finishHouseEntry" type="button">✓ Haus-Einsatz beenden</button><div class="small-note running-entry-note">Haus-Einsatz läuft seit ${fmtTime(new Date(runningHouse.start))} Uhr. Fahrt zur Klinik und Rückfahrt sind eingeschlossen.</div>` : planned ? `<button class="action-button house-entry-pending" type="button" disabled>Im Haus ab ${fmtTime(dutyStart(duty))} Uhr möglich</button>` : `<button class="primary" id="startHouseEntry" type="button">+ Im Haus starten</button>`}
     <button class="action-button" id="newEntry" type="button">+ Telefonat hinzufügen</button>
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
@@ -666,7 +666,7 @@ function renderDuty() {
 `;
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
   if (runningHouse) document.getElementById('finishHouseEntry').onclick = () => finishHouseEntry(duty.id, runningHouse.id);
-  else document.getElementById('startHouseEntry').onclick = () => startHouseEntry(duty.id);
+  else if (!planned) document.getElementById('startHouseEntry').onclick = () => startHouseEntry(duty.id);
   bindInteractiveEntries();
   bindTimelineBoost();
 }
@@ -870,10 +870,7 @@ function deleteEntryById(dutyId, entryId) {
 function startHouseEntry(dutyId, startedAt = new Date()) {
   const duty = state.duties.find(item => item.id === dutyId);
   if (!duty || openHouseEntry(duty)) return;
-  if (startedAt < dutyStart(duty) || startedAt >= dutyEnd(duty)) {
-    alert('Ein Hauseinsatz kann nur während der hinterlegten Rufbereitschaft gestartet werden.');
-    return;
-  }
+  if (startedAt < dutyStart(duty) || startedAt >= dutyEnd(duty)) return;
   duty.entries.push({ id: uid(), type: 'Im Haus', start: startedAt.toISOString(), note: '' });
   saveState(); haptic(); render();
 }
