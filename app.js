@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.47';
+const APP_VERSION = '7.48';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -962,10 +962,12 @@ function openEntryContextMenu(dutyId, entryId) {
 function scheduledDutyBounds(date) {
   return {startOverride:dutyStart({date}).toISOString(),endOverride:dutyEnd({date}).toISOString()};
 }
-function weekendDutyDates(startDate) {
-  const start=parseLocalDate(startDate);
-  if(start.getDay()!==5) return [startDate];
-  return [0,1,2].map(offset=>{const date=new Date(start);date.setDate(date.getDate()+offset);return localDateKey(date);});
+function weekendDutyDates(selectedDate) {
+  const selected=parseLocalDate(selectedDate), day=selected.getDay();
+  if(![0,5,6].includes(day)) return [selectedDate];
+  const friday=new Date(selected);
+  friday.setDate(friday.getDate()-(day===0?2:day===6?1:0));
+  return [0,1,2].map(offset=>{const date=new Date(friday);date.setDate(date.getDate()+offset);return localDateKey(date);});
 }
 function openNewDuty() {
   modal.classList.add('duty-date-dialog');
@@ -975,16 +977,17 @@ function openNewDuty() {
     <div class="modal-title">Neuer Dienst</div>
     <label class="field"><span>Datum des Dienstbeginns</span><input id="dutyDate" type="date" value="${initialDate}"></label>
     <div class="small-note" id="dutyScheduleNote">Dienstzeit: ${scheduleText(initialDate)}.</div>
-    <label class="settings-toggle-row" id="weekendDutyOption" hidden><span>Samstag und Sonntag ebenfalls anlegen<br><small>Drei getrennte Dienste – jeweils einzeln gezählt und berechnet.</small></span><input type="checkbox" id="addWeekendDuties"></label>
+    <label class="settings-toggle-row weekend-duty-option" id="weekendDutyOption" hidden><span><strong>Gesamtes Wochenende anlegen</strong><small>Freitag bis Sonntag als drei getrennte Dienste anlegen.</small></span><input type="checkbox" id="addWeekendDuties" aria-label="Gesamtes Wochenende anlegen"></label>
     <div id="modalError" class="error"></div>
     <div class="modal-actions"><button type="button" class="primary" id="saveDuty">Speichern</button><button class="secondary-button">Abbrechen</button></div>
   </div>`;
   modal.showModal();
   const updateWeekendOption=date=>{
     const option=document.getElementById('weekendDutyOption'), toggle=document.getElementById('addWeekendDuties');
-    const isFriday=date&&parseLocalDate(date).getDay()===5;
-    option.hidden=!isFriday;
-    if(!isFriday) toggle.checked=false;
+    const day=date?parseLocalDate(date).getDay():-1;
+    const isWeekendDay=[0,5,6].includes(day);
+    option.hidden=!isWeekendDay;
+    if(!isWeekendDay) toggle.checked=false;
   };
   updateWeekendOption(initialDate);
   document.getElementById('dutyDate').onchange = event => {
