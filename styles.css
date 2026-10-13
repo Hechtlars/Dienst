@@ -234,9 +234,12 @@ dialog.action-sheet-open button {
   position: relative; display: flex; align-items: center; gap: 12px; min-height: 62px;
   background: var(--card); border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; margin: 6px 0 10px;
 }
+.settings-toggle-row[hidden] { display: none; }
 .settings-toggle-row > span:first-child { flex: 1; min-width: 0; }
 .settings-toggle-row strong { display: block; font-size: 16px; }
 .settings-toggle-row small { display: block; color: var(--secondary); font-size: 12px; line-height: 1.35; margin-top: 3px; }
+.weekend-duty-option { align-items: flex-start; min-height: 0; }
+.weekend-duty-option input { flex: 0 0 auto; width: 26px; height: 26px; margin: 1px 0 0; accent-color: var(--accent); }
 .switch-input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 .switch { flex: 0 0 auto; width: 51px; height: 31px; border-radius: 999px; background: #d1d3d7; position: relative; transition: background .2s ease; }
 .switch::after { content: ''; position: absolute; width: 27px; height: 27px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .2s ease; }
