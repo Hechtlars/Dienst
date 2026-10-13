@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.49';
+const APP_VERSION = '7.50';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -283,7 +283,12 @@ function fmtDate(date) { return new Intl.DateTimeFormat('de-DE', { day: 'numeric
 function fmtShortDate(date) { return new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date); }
 function fmtTime(date) { return new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(date); }
 function fmtMonth(date) { return new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(date); }
-function minutes(entry) { return Math.max(0, Math.round((new Date(entry.end) - new Date(entry.start)) / 60000)); }
+function isOpenHouseEntry(entry) { return entry?.type === 'Im Haus' && !entry.end; }
+function openHouseEntry(duty) { return (duty?.entries || []).find(isOpenHouseEntry) || null; }
+function minutes(entry) {
+  if (!entry?.start || !entry?.end) return 0;
+  return Math.max(0, Math.round((new Date(entry.end) - new Date(entry.start)) / 60000));
+}
 function sum(duty, type) { return duty.entries.filter(entry => entry.type === type).reduce((total, entry) => total + minutes(entry), 0); }
 function roundedHours(minuteCount) { return Math.ceil(minuteCount / 60); }
 // Rufdienst-Regel:
@@ -371,7 +376,9 @@ function rbTier(duty, context=state.duties) {
 }
 function dutyPay(duty, context=state.duties) {
   const rates=ratesForDuty(duty), hours=dutyRoundedHours(duty), buckets=actualMinuteBuckets(duty);
-  const reasons=[], entryDetails=(duty.entries||[]).map(entry=>({id:entry.id,type:entry.type,
+  const reasons=[], completedEntries=(duty.entries||[]).filter(entry=>!isOpenHouseEntry(entry));
+  if(openHouseEntry(duty)) reasons.push('Laufender Hauseinsatz wird erst nach dem Beenden vergütet');
+  const entryDetails=completedEntries.map(entry=>({id:entry.id,type:entry.type,
     hours:entry.type==='Im Haus'?roundedHours(minutes(entry)):sum(duty,'Telefonisch')?phoneRoundedHours(duty)*minutes(entry)/sum(duty,'Telefonisch'):0,
     hoursPay:0,supplements:{night:0,saturday:0,sunday:0,holiday:0,specialDecember:0},specialRB:0,rbTimeExtras:0,tierPay:0,total:0}));
   const detailsById=new Map(entryDetails.map(e=>[e.id,e]));
@@ -522,6 +529,8 @@ function activeDuty() { const now = new Date(); return sortedDuties().find(duty 
 function homeDuty(now = new Date()) {
   const active=sortedDuties().find(duty=>dutyStart(duty)<=now&&now<dutyEnd(duty));
   if(active) return {duty:active,planned:false};
+  const running=sortedDuties().find(duty=>openHouseEntry(duty));
+  if(running) return {duty:running,planned:false};
   const today=localDateKey(now);
   const planned=state.duties.find(duty=>duty.date===today&&dutyStart(duty)>now);
   return planned ? {duty:planned,planned:true} : {duty:null,planned:false};
@@ -637,6 +646,7 @@ function renderDuty() {
   const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
   const phoneMinutes = sum(duty, 'Telefonisch');
   const houseMinutes = sum(duty, 'Im Haus');
+  const runningHouse = openHouseEntry(duty);
   main.innerHTML = `
     <section class="card hero">
       <div class="hero-kicker">${planned?'Heutige Rufbereitschaft geplant':'Aktuelle Rufbereitschaft'}</div>
@@ -648,12 +658,15 @@ function renderDuty() {
       <div class="stat"><div class="stat-label">Telefonisch</div><div class="stat-number">${phoneMinutes} Min.</div><div class="stat-detail">${hourLabel(roundedHours(phoneMinutes))} gerundet</div></div>
       <div class="stat"><div class="stat-label">Im Haus</div><div class="stat-number">${houseMinutes} Min.</div><div class="stat-detail">${hourLabel(houseRoundedHours(duty))} gerundet</div></div>
     </section>
-    <button class="primary" id="newEntry" type="button">+ Einsatz hinzufügen</button>
+    ${runningHouse ? `<button class="primary" id="finishHouseEntry" type="button">✓ Haus-Einsatz beenden</button><div class="small-note running-entry-note">Haus-Einsatz läuft seit ${fmtTime(new Date(runningHouse.start))} Uhr. Fahrt zur Klinik und Rückfahrt sind eingeschlossen.</div>` : `<button class="primary" id="startHouseEntry" type="button">+ Im Haus starten</button>`}
+    <button class="action-button" id="newEntry" type="button">+ Telefonat hinzufügen</button>
     <div class="card-header">Einsätze</div>
     <section class="card">${entries.length ? entries.map(entry => entryRow(duty, entry, true)).join('') : '<div class="empty">Noch keine Einsätze</div>'}</section>
     ${state.settings.showPay ? payDetailCard(duty) : ''}
 `;
   document.getElementById('newEntry').onclick = () => openNewEntry(duty.id);
+  if (runningHouse) document.getElementById('finishHouseEntry').onclick = () => finishHouseEntry(duty.id, runningHouse.id);
+  else document.getElementById('startHouseEntry').onclick = () => startHouseEntry(duty.id);
   bindInteractiveEntries();
   bindTimelineBoost();
 }
@@ -775,22 +788,23 @@ function payDetailCard(duty) {
 
 function entryRow(duty, entry, withDelete) {
   const start = new Date(entry.start);
-  const end = new Date(entry.end);
+  const running = isOpenHouseEntry(entry);
+  const end = running ? null : new Date(entry.end);
   const badgeClass = entry.type === 'Telefonisch' ? 'type-phone' : 'type-house';
-  const entryPay=state.settings.showPay?dutyPay(duty).entryDetails.find(e=>e.id===entry.id):null;
-  const endDateText = localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`;
+  const entryPay=state.settings.showPay&&!running?dutyPay(duty).entryDetails.find(e=>e.id===entry.id):null;
+  const endDateText = !running&&localDateKey(start) !== localDateKey(end) ? ` (${fmtShortDate(end)})` : '';
   return `<div class="swipe-item entry-swipe-item" data-kind="entry" data-duty="${duty.id}" data-entry="${entry.id}">
     ${withDelete ? '<button class="swipe-delete-action" type="button" aria-label="Einsatz löschen">Löschen</button>' : ''}
     <div class="swipe-content row entry-row" role="button" tabindex="0">
       <div class="row-main">
         <div><span class="type-badge ${badgeClass}">${escapeHtml(entry.type)}</span></div>
-        <div class="row-subtitle">${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}</div>
+        <div class="row-subtitle">${running ? `${fmtDate(start)} seit ${fmtTime(start)} Uhr · läuft` : `${fmtDate(start)} von ${fmtTime(start)} bis ${fmtTime(end)}${endDateText}`}</div>
         ${entry.patientId ? `<div class="entry-note">Patienten-ID: ${escapeHtml(entry.patientId)}</div>` : ''}
         ${entry.patientIdPhoto ? `<button type="button" class="entry-photo-link" data-photo-duty="${escapeHtml(duty.id)}" data-photo-entry="${escapeHtml(entry.id)}">📷 Patienten-ID anzeigen</button>` : ''}
         ${entry.note ? `<div class="entry-note">Bemerkung: ${escapeHtml(entry.note)}</div>` : ''}
         ${entryPay ? `<div class="entry-pay">${fmtMoney(entryPay.total)}${dutyPay(duty).incomplete?' · vorläufig':''}<small>Basis ${fmtMoney(entryPay.hoursPay)} · Zeit ${fmtMoney(Object.values(entryPay.supplements).reduce((a,b)=>a+b,0))} · RB 00–06 ${fmtMoney(entryPay.specialRB)} · Staffel ${fmtMoney(entryPay.tierPay)}${entry.type==='Telefonisch'?' · Anteil am Telefonpool':''}</small></div>`:''}
       </div>
-      <div class="row-value">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</div>
+      <div class="row-value">${running ? 'Läuft' : `${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}`}</div>
       <span class="chevron">›</span>
     </div>
   </div>`;
@@ -852,6 +866,29 @@ function deleteEntryById(dutyId, entryId) {
     haptic();
     render();
   });
+}
+function startHouseEntry(dutyId, startedAt = new Date()) {
+  const duty = state.duties.find(item => item.id === dutyId);
+  if (!duty || openHouseEntry(duty)) return;
+  if (startedAt < dutyStart(duty) || startedAt >= dutyEnd(duty)) {
+    alert('Ein Hauseinsatz kann nur während der hinterlegten Rufbereitschaft gestartet werden.');
+    return;
+  }
+  duty.entries.push({ id: uid(), type: 'Im Haus', start: startedAt.toISOString(), note: '' });
+  saveState(); haptic(); render();
+}
+function finishHouseEntry(dutyId, entryId, finishedAt = new Date()) {
+  const duty = state.duties.find(item => item.id === dutyId);
+  const entry = duty?.entries.find(item => item.id === entryId && isOpenHouseEntry(item));
+  if (!duty || !entry) return;
+  if (finishedAt <= new Date(entry.start)) { alert('Das Ende muss nach dem Start liegen.'); return; }
+  if (finishedAt > dutyEnd(duty)) {
+    openEditEntry(dutyId, entryId);
+    document.getElementById('modalError').textContent = `Das aktuelle Ende liegt nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr. Bitte die Zeit prüfen und manuell speichern.`;
+    return;
+  }
+  entry.end = finishedAt.toISOString();
+  saveState(); haptic(); render();
 }
 function bindSwipeItem(item, onOpen, onDelete, onLongPress) {
   const content = item.querySelector('.swipe-content');
@@ -1127,6 +1164,7 @@ function openNewEntry(dutyId) {
     const error = document.getElementById('modalError');
     error.textContent = '';
     if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
+    if (type === 'Im Haus' && openHouseEntry(duty)) { error.textContent = 'Ein Hauseinsatz läuft bereits. Bitte diesen zuerst beenden.'; return; }
     const startDate = new Date(`${date}T${startTime}:00`);
     const endDate = new Date(`${date}T${endTime}:00`);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
@@ -1145,13 +1183,13 @@ function openEditEntry(dutyId, entryId) {
   const entry = duty?.entries.find(item => item.id === entryId);
   if (!duty || !entry) return;
   let type = entry.type;
-  const start = new Date(entry.start), end = new Date(entry.end);
+  const start = new Date(entry.start), running = isOpenHouseEntry(entry), end = running ? null : new Date(entry.end);
   modalContent.innerHTML = `<div class="modal-body entry-form-body">
     <div class="modal-title">Einsatz bearbeiten</div>
     <div class="segment"><button type="button" class="${type === 'Telefonisch' ? 'selected' : ''}" data-type="Telefonisch">Telefonisch</button><button type="button" class="${type === 'Im Haus' ? 'selected' : ''}" data-type="Im Haus">Im Haus</button></div>
     <label class="field"><span>Datum</span><input id="entryDate" type="date" value="${localDateKey(start)}"></label>
     <label class="field"><span>Startzeit</span><input id="entryStart" type="time" value="${pad(start.getHours())}:${pad(start.getMinutes())}"></label>
-    <label class="field"><span>Endzeit</span><input id="entryEnd" type="time" value="${pad(end.getHours())}:${pad(end.getMinutes())}"></label>
+    <label class="field"><span>${running ? 'Endzeit (noch offen)' : 'Endzeit'}</span><input id="entryEnd" type="time" value="${running ? '' : `${pad(end.getHours())}:${pad(end.getMinutes())}`}"></label>
     <label class="field"><span>Patienten-ID (optional)</span>
       <div class="patient-photo-entry-row">
         <button type="button" class="patient-scan-button" id="scanPatientId" aria-label="Patienten-ID fotografieren"><svg class="patient-camera-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1191,13 +1229,14 @@ function openEditEntry(dutyId, entryId) {
     const endTime = document.getElementById('entryEnd').value;
     const note = document.getElementById('entryNote').value.trim();
     const error = document.getElementById('modalError'); error.textContent = '';
-    if (!date || !startTime || !endTime) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
-    const startDate = new Date(`${date}T${startTime}:00`), endDate = new Date(`${date}T${endTime}:00`);
-    if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
+    if (!date || !startTime || (!endTime && !(running && type === 'Im Haus'))) { error.textContent = 'Bitte Datum und Zeiten ausfüllen.'; return; }
+    const startDate = new Date(`${date}T${startTime}:00`), endDate = endTime ? new Date(`${date}T${endTime}:00`) : null;
+    if (endDate && endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
     if (startDate < dutyStart(duty) || startDate >= dutyEnd(duty)) { error.textContent = 'Die Startzeit muss innerhalb dieses Dienstes liegen.'; return; }
-    if (endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
+    if (endDate && endDate > dutyEnd(duty)) { error.textContent = `Die Endzeit darf nicht nach dem Dienstende um ${fmtTime(dutyEnd(duty))} Uhr liegen.`; return; }
+    if (type === 'Im Haus' && !running && openHouseEntry(duty)) { error.textContent = 'Ein Hauseinsatz läuft bereits. Bitte diesen zuerst beenden.'; return; }
     const patientIdPhoto = document.getElementById('entryPatientIdPhoto')?.value || '';
-    Object.assign(entry, { type, start: startDate.toISOString(), end: endDate.toISOString(), patientIdPhoto, note });
+    Object.assign(entry, { type, start: startDate.toISOString(), ...(endDate ? {end:endDate.toISOString()} : {}), patientIdPhoto, note });
     saveState(); haptic(); modal.close(); render();
   };
 }
@@ -1441,8 +1480,8 @@ function exportMonthCsv() {
     if (!duty.entries.length) rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), '', '', '', '', '0', '', '', '0']);
     for (const entry of [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start))) {
       const start = new Date(entry.start);
-      const end = new Date(entry.end);
-      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), `${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.patientId || '', entry.note || '', rounded[entry.type],state.settings.showPay?cents(dutyPay(duty).entryDetails.find(e=>e.id===entry.id).total):'',state.settings.showPay?(dutyPay(duty).incomplete?'Vorläufig':'Berechenbar'):'']);
+      const running=isOpenHouseEntry(entry), end = running ? null : new Date(entry.end), detail=state.settings.showPay&&!running?dutyPay(duty).entryDetails.find(e=>e.id===entry.id):null;
+      rows.push([fmtShortDate(dutyStart(duty)), fmtTime(dutyStart(duty)), fmtTime(dutyEnd(duty)), entry.type, fmtShortDate(start), fmtTime(start), running?'offen':`${fmtTime(end)}${localDateKey(start) === localDateKey(end) ? '' : ` (${fmtShortDate(end)})`}`, minutes(entry), entry.patientId || '', entry.note || '', rounded[entry.type],detail?cents(detail.total):'',running?'Offen':state.settings.showPay?(dutyPay(duty).incomplete?'Vorläufig':'Berechenbar'):'']);
     }
   }
   const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(';')).join('\r\n');
@@ -1458,15 +1497,15 @@ function printMonthReport() {
     const entries = [...duty.entries].sort((a, b) => new Date(a.start) - new Date(b.start));
     const entryRows = entries.length ? entries.map(entry => {
       const entryStart = new Date(entry.start);
-      const entryEnd = new Date(entry.end);
+      const running=isOpenHouseEntry(entry), entryEnd = running ? null : new Date(entry.end), detail=state.settings.showPay&&!running?dutyPay(duty).entryDetails.find(e=>e.id===entry.id):null;
       return `<tr>
         <td data-label="Art">${escapeHtml(entry.type)}</td>
         <td data-label="Datum">${fmtDate(entryStart)}</td>
         <td data-label="Beginn">${fmtTime(entryStart)}</td>
-        <td data-label="Ende">${fmtTime(entryEnd)}</td>
-        <td data-label="Dauer">${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}</td>
+        <td data-label="Ende">${running?'läuft':fmtTime(entryEnd)}</td>
+        <td data-label="Dauer">${running?'noch offen':`${minutes(entry)} Min.${entry.type === 'Im Haus' ? `<span class="entry-rounded-hours">${hourLabel(roundedHours(minutes(entry)))} gerundet</span>` : ''}`}</td>
         <td data-label="Patienten-ID">${escapeHtml(entry.patientId || '–')}${/^data:image\/(jpeg|png|webp);base64,/.test(entry.patientIdPhoto||'')?`<img alt="Patienten-ID-Ausschnitt" style="display:block;max-width:150px;max-height:60px" src="${escapeHtml(entry.patientIdPhoto)}">`:''}</td>
-        <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}${state.settings.showPay?`<br>Vergütung ${fmtMoney(dutyPay(duty).entryDetails.find(e=>e.id===entry.id).total)} · ${dutyPay(duty).incomplete?'vorläufig':'ohne Pauschale'}`:''}</td>
+        <td data-label="Bemerkung">${escapeHtml(entry.note || '–')}${detail?`<br>Vergütung ${fmtMoney(detail.total)} · ${dutyPay(duty).incomplete?'vorläufig':'ohne Pauschale'}`:running?'<br>Vergütung erst nach Beenden':''}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="7" class="muted">Keine Einsätze erfasst</td></tr>';
     const pay = state.settings.showPay ? dutyPay(duty) : null;

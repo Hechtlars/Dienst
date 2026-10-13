@@ -1,4 +1,4 @@
-# Dienst – Version 7.49
+# Dienst – Version 7.50
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -15,6 +15,8 @@ Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danac
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
 
 ## Änderungen
+
+- Version 7.50 ergänzt ausschließlich für „Im Haus“ einen laufenden Einsatz: Beim Losfahren genügt „Im Haus starten“, beim Zurückkehren „Haus-Einsatz beenden“. Es wird keine fiktive Endzeit gespeichert. Offene Hauseinsätze bleiben lokal erhalten, werden deutlich markiert und erst nach dem Beenden in Einsatzstunden und Vergütung einbezogen. Telefonate bleiben unverändert mit der 10-Minuten-Vorgabe. PWA-Cache auf 7.50 erhöht.
 
 - Version 7.49 schließt jeden offenen App-Dialog bei Tipp auf den sichtbaren abgedunkelten Rand. Das entspricht „Abbrechen“; es werden keine Eingaben gespeichert. PWA-Cache auf 7.49 erhöht.
 
