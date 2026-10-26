@@ -670,3 +670,15 @@ dialog.action-sheet-open button {
 .calculation-example { display: grid; gap: 5px; padding: 11px; border-radius: 12px; background: var(--accent-soft); }
 .calculation-example > strong { font-size: 14px; }
 .calculation-example b { color: inherit; }
+
+/* Native Kontrollkästchen dürfen nicht die Breite normaler Textfelder erben. */
+.settings-toggle-row > input[type="checkbox"]:not(.switch-input) {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  position: static;
+  accent-color: var(--accent);
+}
