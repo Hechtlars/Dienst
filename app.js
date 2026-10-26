@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.53';
+const APP_VERSION = '7.54';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -29,6 +29,7 @@ const state = loadState();
 let currentView = 'dienst';
 let selectedMonth = startOfMonth(new Date());
 let selectedDutyId = null;
+let calculationHelpOpen = false;
 
 const main = document.getElementById('mainContent');
 const title = document.getElementById('pageTitle');
@@ -688,7 +689,7 @@ function renderMonth() {
         <div class="month-stat-breakdown"><span>Telefonisch <strong>${totals.phoneHours} Std.</strong></span><span>Im Haus <strong>${totals.houseHours} Std.</strong></span></div>
       </div>
     </section>
-    ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div><div class="small-note">${(() => { const m=monthPayDetails(duties);return `${duties.length} Rufbereitschaften · ${m.actual.toFixed(0)} tatsächliche Minuten · ${m.hours} vergütete Stunden · Einsatzvergütung ${fmtMoney(m.hoursPay)} · Pauschalen ${fmtMoney(m.allowance)} · Nacht ${fmtMoney(m.supplements.night)} · Staffel ${fmtMoney(m.tierPay)} · RB 00–06 ${fmtMoney(m.specialRB)} · Samstag ${fmtMoney(m.supplements.saturday)} · Sonntag ${fmtMoney(m.supplements.sunday)} · Feiertag ${fmtMoney(m.supplements.holiday)} · 24./31.12. ${fmtMoney(m.supplements.specialDecember)}`; })()}</div>${monthPayDetails(duties).incomplete ? `<div class="small-note">Vorläufiger Vergleichswert: ${escapeHtml(monthPayDetails(duties).incompleteReasons.join('; '))}.</div>` : ''}</section>` : ''}
+    ${state.settings.showPay ? `<section class="pay-month-card"><div><div class="pay-kicker">Vergütung ${fmtMonth(selectedMonth)}</div><div class="pay-subtitle">Summe aller erfassten Dienste</div></div><div class="pay-month-value">${fmtMoney(monthPay(duties))}</div><div class="small-note">${(() => { const m=monthPayDetails(duties);return `${duties.length} Rufbereitschaften · ${m.actual.toFixed(0)} tatsächliche Minuten · ${m.hours} vergütete Stunden · Einsatzvergütung ${fmtMoney(m.hoursPay)} · Pauschalen ${fmtMoney(m.allowance)} · Nacht ${fmtMoney(m.supplements.night)} · Staffel ${fmtMoney(m.tierPay)} · RB 00–06 ${fmtMoney(m.specialRB)} · Samstag ${fmtMoney(m.supplements.saturday)} · Sonntag ${fmtMoney(m.supplements.sunday)} · Feiertag ${fmtMoney(m.supplements.holiday)} · 24./31.12. ${fmtMoney(m.supplements.specialDecember)}`; })()}</div>${monthPayDetails(duties).incomplete ? `<div class="small-note">Vorläufiger Vergleichswert: ${escapeHtml(monthPayDetails(duties).incompleteReasons.join('; '))}.</div>` : ''}${state.settings.showPay ? calculationHelpCard(selectedMonth) : ''}</section>` : ''}
     <div class="month-actions">
       <button class="action-button" id="exportCsv" type="button">CSV exportieren</button>
       <button class="action-button" id="printReport" type="button">PDF-Bericht</button>
@@ -715,7 +716,10 @@ function renderMonth() {
   document.getElementById('nextMonth').onclick = () => { selectedMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1); renderMonth(); };
   document.getElementById('exportCsv').onclick = exportMonthCsv;
   document.getElementById('printReport').onclick = printMonthReport;
-  if (state.settings.showPay) document.getElementById('payrollComparison').onclick = openPayrollComparison;
+  if (state.settings.showPay) {
+    document.getElementById('payrollComparison').onclick = openPayrollComparison;
+    document.getElementById('calculationHelpToggle').onclick = () => { calculationHelpOpen = !calculationHelpOpen; renderMonth(); };
+  }
   bindInteractiveDuties();
 }
 
@@ -775,6 +779,51 @@ function payDetailCard(duty) {
     <div class="small-note">Pauschale und ihr Staffelanteil gehören zum Dienst. Telefonvergütung wird anteilig nach Minuten aufgeteilt; kein zusätzlicher Stundenanspruch pro Telefonat. Zeitzuschläge gelten für echte Zeiten. Hauseinsatzzeiten einschließlich erforderlicher Wegezeiten erfassen.</div>
     <div class="small-note">Tatsächlich ${pay.buckets.actual.toFixed(0)} Min. · tariflich ${pay.hours} Std. · Rundungsgewinn ${(pay.hours*60-pay.buckets.actual).toFixed(0)} Min.</div>
     ${pay.incomplete?`<div class="small-note"><strong>Vorläufig, nicht vollständig:</strong> ${escapeHtml(pay.incompleteReasons.join('; '))}. Fehlende Positionen sind nicht in der Summe enthalten.</div>`:''}
+  </section>`;
+}
+
+
+function calculationHelpCard(month) {
+  const monthKey = payrollMonthKey(month);
+  const tariffDate = `${monthKey}-01`;
+  const rates = ratesForDuty({ date: tariffDate });
+  const workRate = Number(rates.workHourlyRate);
+  const allowanceRate = Number(rates.allowanceHourlyRate);
+  const supplementBase = Number(rates.supplementBaseRate);
+  const nightRule = minuteRules(new Date(`${tariffDate}T20:00`));
+  const hasWorkRate = Number.isFinite(workRate) && workRate > 0;
+  const hasAllowanceRate = Number.isFinite(allowanceRate) && allowanceRate > 0;
+  const hasSupplementBase = Number.isFinite(supplementBase) && supplementBase > 0;
+  // Das Beispiel nutzt bewusst die zentrale dutyPay-Engine; es ist keine zweite Berechnung.
+  const exampleDuty = {
+    id: '__calculation_example__', date: tariffDate, entries: [{
+      id: '__calculation_example_phone__', type: 'Telefonisch',
+      start: new Date(`${tariffDate}T03:00`).toISOString(),
+      end: new Date(`${tariffDate}T03:05`).toISOString(), note: ''
+    }]
+  };
+  const example = dutyPay(exampleDuty, [exampleDuty]);
+  const money = value => Number.isFinite(value) ? fmtMoney(value) : 'nicht hinterlegt';
+  const periodText = fmtMonth(month);
+  const open = calculationHelpOpen;
+  const rateLine = hasWorkRate ? `→ aktuell <strong>${money(workRate)} je angefangener Stunde</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt';
+  const nightLine = hasSupplementBase ? `→ aktuell ca. <strong>${money(supplementBase * nightRule.nightRate)}/h</strong>, minutengenau anteilig` : '→ Zuschlags-Bemessungsgrundlage nicht hinterlegt';
+  const extraLine = hasWorkRate ? `→ aktuell <strong>${money(workRate * .5)} Mindestzuschlag</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt';
+  return `<section class="calculation-help" aria-label="Erklärung der Rufbereitschaftsberechnung">
+    <button class="calculation-help-toggle" id="calculationHelpToggle" type="button" aria-expanded="${open}">
+      Erkläre mir die Berechnung <span aria-hidden="true">${open ? '⌃' : '›'}</span>
+    </button>
+    <div id="calculationHelpContent" class="calculation-help-content" ${open ? '' : 'hidden'}>
+      <div class="calculation-help-context">Rufbereitschaft · Werte für ${periodText}</div>
+      <div class="calculation-rule"><strong>Haus</strong><span>Je Einsatz auf volle Stunde</span><em>${rateLine}</em></div>
+      <div class="calculation-rule"><strong>Telefon</strong><span>Alle Telefonate sammeln → dann auf volle Stunde</span><em>${rateLine}</em></div>
+      <div class="calculation-rule"><strong>Nacht · 20–06</strong><span>${Math.round(nightRule.nightRate * 100)} % · echte Minuten, keine Aufrundung</span><em>${nightLine}</em></div>
+      <div class="calculation-rule"><strong>Extra · 00–06</strong><span>50 % · unter 60 Min. mindestens 1 h Bewertungszeit</span><em>${extraLine}</em></div>
+      <div class="calculation-rule"><strong>RB · Mo–Fr</strong><span>2-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 2)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
+      <div class="calculation-rule"><strong>RB · Sa/So/Feiertag</strong><span>4-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 4)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
+      <p class="calculation-help-note"><strong>Kurz gesagt:</strong> Haus wird je Einsatz aufgerundet. Telefon wird gesammelt und anschließend aufgerundet. Beim Nachtzuschlag zählen echte Minuten. Für Extra 00–06 gilt bei kurzer Inanspruchnahme mindestens eine Stunde Bewertungszeit.</p>
+      <div class="calculation-example"><strong>Beispiel: Telefon 03:00–03:05</strong><span>Tatsächlich gearbeitet <b>5 Min.</b> · tariflich vergütete Einsatzzeit <b>1 h</b> · Bewertungszeit Extra 00–06 <b>1 h</b></span><span>Telefonvergütung <b>${money(example.calloutPay)}</b> · Nachtzuschlag <b>${money(example.nightSurcharge)}</b> · Extra 00–06 <b>${money(example.specialRB)}</b></span><em>Gesamt (ohne RB-Pauschale): <strong>${money(cents(example.calloutPay + example.nightSurcharge + example.specialRB))}</strong></em></div>
+    </div>
   </section>`;
 }
 

@@ -90,6 +90,15 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),true);
    await page.selectOption('#tariffGroup','III');assert.equal(await page.locator('#tariffStage option').count(),3);await page.selectOption('#tariffStage','2');await page.click('#fillReference');assert.equal(await page.inputValue('#workHourlyRate'),'66.91');assert.equal(await page.inputValue('#allowanceHourlyRate'),'57.59');
    await page.locator('#modalContent .modal-body > .secondary-button').last().click();
+   await page.click('[data-view="monat"]');
+   assert.match(await page.textContent('#mainContent'),/Erkläre mir die Berechnung/);
+   assert.equal(await page.locator('#calculationHelpContent').isHidden(),true);
+   await page.click('#calculationHelpToggle');
+   assert.equal(await page.locator('#calculationHelpContent').isVisible(),true);
+   assert.match(await page.textContent('#calculationHelpContent'),/1 h Bewertungszeit/);
+   assert.match(await page.textContent('#calculationHelpContent'),/50,96/);
+   await page.click('#calculationHelpToggle');
+   assert.equal(await page.locator('#calculationHelpContent').isHidden(),true);
   });
   await run(label+' UI Dienst und Einsatz anlegen/bearbeiten',async()=>{
    await page.click('#newDuty');assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),true);await page.mouse.click(4,4);assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),false,'Tipp auf den abgedunkelten Rand bricht den Dialog ab');
