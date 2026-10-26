@@ -99,6 +99,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    assert.match(await page.textContent('#calculationHelpContent'),/50,96/);
    await page.click('#calculationHelpToggle');
    assert.equal(await page.locator('#calculationHelpContent').isHidden(),true);
+   await page.click('[data-view="dienst"]');
   });
   await run(label+' UI Dienst und Einsatz anlegen/bearbeiten',async()=>{
    await page.click('#newDuty');assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),true);await page.mouse.click(4,4);assert.equal(await page.locator('#modal').evaluate(dialog=>dialog.open),false,'Tipp auf den abgedunkelten Rand bricht den Dialog ab');
