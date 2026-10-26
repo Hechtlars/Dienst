@@ -83,7 +83,10 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    checks.forEach(name=>results.push({name:label+' '+name,status:'PASS'}));
   });
   await run(label+' UI Tarifparameter speichern',async()=>{
-   await page.click('#menuButton');await page.selectOption('#tariffGroup','II');await page.fill('#rateValidFrom','2026-03-01');await page.click('#fillReference');
+   await page.click('#menuButton');
+   const checkboxLayout=await page.locator('#ratesConfirmed').evaluate(el=>{const box=el.getBoundingClientRect(),label=el.parentElement.getBoundingClientRect(),text=el.previousElementSibling.getBoundingClientRect();return {width:box.width,left:box.left,textRight:text.right,labelRight:label.right};});
+   assert.ok(checkboxLayout.width<=26&&checkboxLayout.left>=checkboxLayout.textRight&&checkboxLayout.left+checkboxLayout.width<=checkboxLayout.labelRight,'Tarifbestätigung: Checkbox und Text dürfen sich nicht überlagern');
+   await page.selectOption('#tariffGroup','II');await page.fill('#rateValidFrom','2026-03-01');await page.click('#fillReference');
    assert.equal(await page.inputValue('#workHourlyRate'),'50.96');assert.equal(await page.inputValue('#supplementBaseRate'),'50.26');await page.fill('#employmentFraction','100');await page.check('#ratesConfirmed');page.once('dialog',d=>d.accept());await page.click('#savePaySettings');
    await page.click('#menuButton');assert.match(await page.textContent('#modalContent'),/Vergütung anzeigen/);assert.equal(await page.isChecked('#showPayToggle'),true);
    await page.locator('label:has(#showPayToggle)').click();assert.equal(await page.evaluate(()=>state.settings.showPay),false);assert.equal(await page.locator('.pay-detail-card').count(),0);
