@@ -719,6 +719,7 @@ function renderMonth() {
   if (state.settings.showPay) {
     document.getElementById('payrollComparison').onclick = openPayrollComparison;
     document.getElementById('calculationHelpToggle').onclick = () => { calculationHelpOpen = !calculationHelpOpen; renderMonth(); };
+    document.getElementById('calculateExample').onclick = calculateHelpExample;
   }
   bindInteractiveDuties();
 }
@@ -783,6 +784,24 @@ function payDetailCard(duty) {
 }
 
 
+function calculateHelpExample() {
+  const output = document.getElementById('exampleResult');
+  const date = document.getElementById('exampleDate').value;
+  const time = document.getElementById('exampleTime').value;
+  const duration = Number(document.getElementById('exampleDuration').value);
+  const type = document.getElementById('exampleType').value;
+  const start = new Date(date + 'T' + time);
+  if (!Number.isFinite(start.getTime()) || !Number.isInteger(duration) || duration < 1 || duration > 1440) {
+    output.textContent = 'Bitte Datum, Uhrzeit und 1–1440 Minuten eingeben.'; return;
+  }
+  const duty = {id:'__example__',date,entries:[{id:'__example_entry__',type,start:start.toISOString(),end:new Date(start.getTime()+duration*60000).toISOString(),note:''}]};
+  const pay = dutyPay(duty,[duty]);
+  const timeExtras = Object.values(pay.supplements).reduce((a,b)=>a+b,0);
+  output.innerHTML = `<p>Tatsächlich gearbeitet: <strong>${duration} Min.</strong><br>Vergütete Einsatzzeit: <strong>${pay.hours} h</strong><br>Bewertungszeit Extra 00–06: <strong>${pay.rb0006EvaluationHours.toLocaleString('de-DE')} h</strong></p>
+    <p>Einsatzvergütung: <strong>${fmtMoney(pay.calloutPay)}</strong><br>Nachtzuschlag (echte ${Math.round(pay.nightActualMinutes)} Min.): <strong>${fmtMoney(pay.nightSurcharge)}</strong><br>Extra 00–06: <strong>${fmtMoney(pay.specialRB)}</strong>${timeExtras-pay.nightSurcharge>0?'<br>Weitere Zeitzuschläge: <strong>'+fmtMoney(timeExtras-pay.nightSurcharge)+'</strong>':''}</p>
+    <strong>Gesamt Einsatz: ${fmtMoney(cents(pay.calloutPay+timeExtras+pay.specialRB))}</strong>
+    <p class="small-note">Ohne RB-Pauschale und monatliche Staffel. Ein einzelner Einsatz; Telefonate werden im echten Dienst gemeinsam gerundet. Keine Speicherung des Beispiels.${pay.incomplete?' Vorläufig: '+escapeHtml(pay.incompleteReasons.join('; '))+'.':''}</p>`;
+}
 function calculationHelpCard(month) {
   const monthKey = payrollMonthKey(month);
   const tariffDate = `${monthKey}-01`;
@@ -794,15 +813,6 @@ function calculationHelpCard(month) {
   const hasWorkRate = Number.isFinite(workRate) && workRate > 0;
   const hasAllowanceRate = Number.isFinite(allowanceRate) && allowanceRate > 0;
   const hasSupplementBase = Number.isFinite(supplementBase) && supplementBase > 0;
-  // Das Beispiel nutzt bewusst die zentrale dutyPay-Engine; es ist keine zweite Berechnung.
-  const exampleDuty = {
-    id: '__calculation_example__', date: tariffDate, entries: [{
-      id: '__calculation_example_phone__', type: 'Telefonisch',
-      start: new Date(`${tariffDate}T03:00`).toISOString(),
-      end: new Date(`${tariffDate}T03:05`).toISOString(), note: ''
-    }]
-  };
-  const example = dutyPay(exampleDuty, [exampleDuty]);
   const money = value => Number.isFinite(value) ? fmtMoney(value) : 'nicht hinterlegt';
   const periodText = fmtMonth(month);
   const open = calculationHelpOpen;
@@ -817,12 +827,19 @@ function calculationHelpCard(month) {
       <div class="calculation-help-context">Rufbereitschaft · Werte für ${periodText}</div>
       <div class="calculation-rule"><strong>Haus</strong><span>Je Einsatz auf volle Stunde</span><em>${rateLine}</em></div>
       <div class="calculation-rule"><strong>Telefon</strong><span>Alle Telefonate sammeln → dann auf volle Stunde</span><em>${rateLine}</em></div>
-      <div class="calculation-rule"><strong>Nacht · 20–06</strong><span>${Math.round(nightRule.nightRate * 100)} % · echte Minuten, keine Aufrundung</span><em>${nightLine}</em></div>
+      <div class="calculation-rule"><strong>Nacht · 20–06 Uhr</strong><span>${Math.round(nightRule.nightRate * 100)} % · echte Minuten, keine Aufrundung</span><em>${nightLine}</em></div>
       <div class="calculation-rule"><strong>Extra · 00–06</strong><span>50 % · unter 60 Min. mindestens 1 h Bewertungszeit</span><em>${extraLine}</em></div>
-      <div class="calculation-rule"><strong>RB · Mo–Fr</strong><span>2-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 2)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
-      <div class="calculation-rule"><strong>RB · Sa/So/Feiertag</strong><span>4-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 4)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
+      <div class="calculation-rule"><strong>RB-Pauschale · Mo–Fr</strong><span>2-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 2)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
+      <div class="calculation-rule"><strong>RB-Pauschale · Sa/So/Feiertag</strong><span>4-facher Stundenwert</span><em>${hasAllowanceRate ? `→ aktuell <strong>${money(allowanceRate * 4)}</strong>` : '→ Persönlicher Stundenwert nicht hinterlegt'}</em></div>
       <p class="calculation-help-note"><strong>Kurz gesagt:</strong> Haus wird je Einsatz aufgerundet. Telefon wird gesammelt und anschließend aufgerundet. Beim Nachtzuschlag zählen echte Minuten. Für Extra 00–06 gilt bei kurzer Inanspruchnahme mindestens eine Stunde Bewertungszeit.</p>
-      <div class="calculation-example"><strong>Beispiel: Telefon 03:00–03:05</strong><span>Tatsächlich gearbeitet <b>5 Min.</b> · tariflich vergütete Einsatzzeit <b>1 h</b> · Bewertungszeit Extra 00–06 <b>1 h</b></span><span>Telefonvergütung <b>${money(example.calloutPay)}</b> · Nachtzuschlag <b>${money(example.nightSurcharge)}</b> · Extra 00–06 <b>${money(example.specialRB)}</b></span><em>Gesamt (ohne RB-Pauschale): <strong>${money(cents(example.calloutPay + example.nightSurcharge + example.specialRB))}</strong></em></div>
+      <div class="calculation-example"><strong>Eigenes Beispiel</strong>
+        <label class="field"><span>Einsatzart</span><select id="exampleType"><option>Telefonisch</option><option>Im Haus</option></select></label>
+        <label class="field"><span>Datum</span><input id="exampleDate" type="date" value="${tariffDate}"></label>
+        <label class="field"><span>Startuhrzeit</span><input id="exampleTime" type="time" value="03:00"></label>
+        <label class="field"><span>Dauer (Minuten)</span><input id="exampleDuration" type="number" inputmode="numeric" min="1" max="1440" step="1" value="5"></label>
+        <button class="secondary-button" id="calculateExample" type="button">Beispiel berechnen</button>
+        <div id="exampleResult" aria-live="polite"></div>
+      </div>
     </div>
   </section>`;
 }
