@@ -100,6 +100,11 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    assert.equal(await page.locator('#calculationHelpContent').isVisible(),true);
    assert.match(await page.textContent('#calculationHelpContent'),/1 h Bewertungszeit/);
    assert.match(await page.textContent('#calculationHelpContent'),/50,96/);
+   await page.click('#calculateExample');
+   assert.match(await page.textContent('#exampleResult'),/77,28/);
+   await page.selectOption('#exampleType','Im Haus');await page.fill('#exampleDuration','65');await page.click('#calculateExample');
+   assert.match(await page.textContent('#exampleResult'),/Vergütete Einsatzzeit: 2 h/);
+
    await page.click('#calculationHelpToggle');
    assert.equal(await page.locator('#calculationHelpContent').isHidden(),true);
    await page.click('[data-view="dienst"]');
