@@ -4,7 +4,7 @@ const STORAGE_KEY = 'dienst-webapp-v1';
 const BACKUP_DATE_KEY = 'dienst-last-backup';
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_DISMISSED_KEY = 'dienst-backup-reminder-dismissed';
-const APP_VERSION = '7.52';
+const APP_VERSION = '7.53';
 const TARIFF_GROUPS = Object.freeze({
   I: { label: 'Ärztin/Arzt (Assistenzarzt)', stages: 6 },
   II: { label: 'Fachärztin/Facharzt', stages: 6 },
@@ -437,21 +437,13 @@ function dutyPay(duty, context=state.duties) {
     if(night) detail.specialRB=cents(cents(.5*night.work*midnightScale/night.rate)*night.rate);
     specialRB+=detail.specialRB;
   }
-  // Lohnarten der geprüften Abrechnung: Zusatz AiRB (2029) führt den
-  // 50%-Überstundenanteil; 50%-Zeitanteile bleiben bei Nacht/Sonntag/Feiertag.
+  // Der besondere 00–06-Zuschlag ist eine eigene Bewertungsregel. Die darin
+  // verwendete Bewertungszeit erhöht weder die tatsächliche Nachtzeit noch den
+  // normalen Nachtzuschlag.
   const specialRBSupplements={night:0,saturday:0,sunday:0,holiday:0,specialDecember:0};
-  eachWorkMinute(duty,(d,m,entry)=>{
-    if(!minuteRules(d).midnight)return;
-    const r=ratesForDuty({date:localDateKey(d)}), base=Number(r.supplementBaseRate)>0?Number(r.supplementBaseRate):0;
-    const rules=minuteRules(d), detail=detailsById.get(entry.id), candidates=[];
-    if(base){const value=m/60*base*rules.nightRate*.5;detail.supplements.night+=value;detail.rbTimeExtras+=value;supplements.night+=value;specialRBSupplements.night+=value;}
-    if(rules.sunday && !(rules.holiday && r.holidayTimeOff==='unknown'))candidates.push(['sunday',base*.25]);
-    if(rules.holiday && r.holidayTimeOff!=='unknown')candidates.push(['holiday',base*(r.holidayTimeOff==='no'?1.35:.35)]);
-    if(candidates.length){const [kind,rate]=candidates.reduce((a,b)=>b[1]>a[1]?b:a);const value=m/60*rate*.5;detail.supplements[kind]+=value;detail.rbTimeExtras+=value;supplements[kind]+=value;specialRBSupplements[kind]+=value;}
-  });
   const extra=Object.values(supplements).reduce((a,b)=>a+b,0), tier=rbTier(duty,context);
   if(tier.percentage) reasons.push(...tier.reasons);
-  const tierBasis=allowance+hoursPay+extra-Object.values(specialRBSupplements).reduce((a,b)=>a+b,0);
+  const tierBasis=allowance+hoursPay+extra;
   const tierPay=tier.confirmed?tier.percentage*tierBasis:0;
   for(const detail of entryDetails) {
     const extras=Object.values(detail.supplements).reduce((a,b)=>a+b,0);
@@ -459,7 +451,7 @@ function dutyPay(duty, context=state.duties) {
     detail.total=detail.hoursPay+extras+detail.specialRB+detail.tierPay;
   }
   const incompleteReasons=[...new Set(reasons)], total=hoursPay+allowance+specialRB+extra+tierPay;
-  return {hours,hoursPay,multiplier:allowanceFactor,allowance,total,rates,buckets,midnightRatedMinutes,specialRB,specialRBSupplements,supplements,tier,tierPay,entryDetails,
+  return {actualMinutes:buckets.actual,paidHouseHours:houseRoundedHours(duty),paidPhoneHours:phoneRoundedHours(duty),paidCalloutHours:hours,nightActualMinutes:buckets.night,rb0006ActualMinutes:buckets.midnight,rb0006EvaluationHours:midnightRatedMinutes/60,calloutPay:hoursPay,nightSurcharge:supplements.night,rb0006Surcharge:specialRB,allowancePay:allowance,totalPay:total,hours,hoursPay,multiplier:allowanceFactor,allowance,total,rates,buckets,midnightRatedMinutes,specialRB,specialRBSupplements,supplements,tier,tierPay,entryDetails,
     incomplete:incompleteReasons.length>0,incompleteReasons};
 }
 function monthPay(duties) { return monthPayDetails(duties).total; }
@@ -770,10 +762,12 @@ function payDetailCard(duty) {
   const pay = dutyPay(duty);
   const line = (label,value) => `<div class="row"><div class="row-main"><div class="row-title">${label}</div></div><div class="row-value strong-value">${fmtMoney(value)}</div></div>`;
   return `<div class="card-header">Vergütung · Rufbereitschaft</div><section class="card pay-detail-card">
-    ${line('Einsatzvergütung · '+pay.hours+' Stunden',pay.hoursPay)}
-    ${line('RB-Pauschale · Faktor '+pay.multiplier,pay.allowance)}
-    ${line('Nachtzuschlag inkl. RB-Zeitanteil · Nachtminuten '+Math.round(pay.buckets.night),pay.supplements.night)}
-    ${line('Besonderer RB-Zuschlag 00–06 · '+pay.midnightRatedMinutes.toFixed(0)+' Bewertungsminuten',pay.specialRB)}
+    <div class="row"><div class="row-main"><div class="row-title">Tatsächlich gearbeitet</div><div class="row-subtitle">Haus und Telefon, ohne Rundung</div></div><div class="row-value strong-value">${Math.round(pay.actualMinutes)} Min.</div></div>
+    <div class="row"><div class="row-main"><div class="row-title">Tariflich vergütete Einsatzzeit</div><div class="row-subtitle">Haus ${pay.paidHouseHours} Std. · Telefon ${pay.paidPhoneHours} Std.</div></div><div class="row-value strong-value">${pay.paidCalloutHours} Std.</div></div>
+    ${line('Einsatzvergütung · '+pay.paidCalloutHours+' Stunden',pay.calloutPay)}
+    ${line('RB-Pauschale · Faktor '+pay.multiplier,pay.allowancePay)}
+    ${line('Nachtzuschlag · 20–06 Uhr · '+Math.round(pay.nightActualMinutes)+' tatsächliche Minuten',pay.nightSurcharge)}
+    ${line('Besonderer RB-Zuschlag 00–06 · '+Math.round(pay.rb0006ActualMinutes)+' tatsächliche Min. → '+pay.rb0006EvaluationHours.toFixed(2)+' Bewertungsstd.',pay.rb0006Surcharge)}
     ${line('Samstag',pay.supplements.saturday)}${line('Sonntag',pay.supplements.sunday)}
     ${line('Feiertag',pay.supplements.holiday)}${line('24./31. Dezember',pay.supplements.specialDecember)}
     ${line('RB-Staffel · Nr. '+pay.tier.ordinal+' · '+Math.round(pay.tier.percentage*100)+' %'+(pay.tier.confirmed?'':' (ungeklärt / nicht addiert)'),pay.tierPay)}

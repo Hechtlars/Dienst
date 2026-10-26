@@ -1,4 +1,4 @@
-# Dienst – Version 7.52
+# Dienst – Version 7.53
 
 Statische Web-App für Rufbereitschaft nach AVR-Caritas Anlage 30. Kein Build und kein Server für persönliche Daten erforderlich. Grundlage: Version 7.37.
 
@@ -13,6 +13,10 @@ GitHub Pages verwendet dafür die Quelle **GitHub Actions**. Die Pipeline übern
 Vor Änderungen weiterhin eine lokale Sicherung exportieren. Die App lädt danach ihre neue Version; falls angezeigt, „Aktualisieren“ antippen. Persönliche Daten bleiben im Browser und werden durch diesen Veröffentlichungsablauf nicht synchronisiert.
 
 Keine Abrechnungs-PDFs oder persönlichen Sicherungen in GitHub hochladen. Dieses Paket enthält keine hochgeladenen Abrechnungen oder Patientendaten.
+
+## Änderungen
+
+- Version 7.53 trennt in der bestehenden zentralen Vergütungsengine ausdrücklich tatsächliche Arbeitszeit, tariflich vergütete Einsatzzeit und die 00–06-Bewertungszeit. Der besondere 00–06-RB-Zuschlag fließt nicht mehr zusätzlich in den normalen Nachtzuschlag ein. Die Detailansicht weist alle drei Ebenen getrennt aus. Der bestätigte reale Fall vom 15.09.2026 ist als Regressionstest enthalten. Die vollständigen Einzeldaten der weiteren vier Septemberdienste fehlen weiterhin; deshalb werden keine nicht belegten Testzeiten erfunden. PWA-Cache auf 7.53 erhöht.
 
 ## Änderungen
 
