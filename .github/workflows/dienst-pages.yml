@@ -17,7 +17,7 @@ concurrency:
 jobs:
   tests:
     name: Berechnung und Browser
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       TZ: Europe/Berlin
@@ -53,7 +53,7 @@ jobs:
     name: Geprüfte Website vorbereiten
     needs: tests
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: read
@@ -74,7 +74,7 @@ jobs:
   deploy:
     name: Geprüfte Website veröffentlichen
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
@@ -90,7 +90,7 @@ jobs:
   live:
     name: Live-Version kontrollieren
     needs: deploy
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       LIVE_URL: ${{ needs.deploy.outputs.url }}
