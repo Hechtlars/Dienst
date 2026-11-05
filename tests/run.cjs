@@ -126,6 +126,13 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    await page.fill('#entryDate','2026-10-06');await page.fill('#entryStart','03:00');await page.fill('#entryEnd','03:10');await page.fill('#entryNote','Test');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/50,96/);
    await page.click('[data-kind="entry"] .swipe-content');await page.fill('#entryNote','Bearbeitet');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/Bearbeitet/);
   });
+  await run(label+' Dienststunden in Monatsliste',async()=>{
+   await page.click('#backMonth');
+   const expected=await page.evaluate(()=>monthDuties().map(d=>hourLabel(dutyRoundedHours(d))+' gerundet'));
+   assert.deepEqual(await page.locator('.duty-rounded-hours').allTextContents(),expected);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   await page.locator('[data-kind="duty"] .swipe-content').first().click();
+  });
   await run(label+' UI Abgleich speichern und Folgemonat',async()=>{
    await page.click('#backMonth');await page.click('#payrollComparison');assert.equal(await page.inputValue('#payrollPaymentMonth'),'2026-11');await page.fill('[data-payroll="total"]','160');await page.check('#payrollComplete');await page.click('#savePayroll');await page.click('#payrollComparison');assert.equal(await page.inputValue('[data-payroll="total"]'),'160');await page.click('#closePayroll');
   });
