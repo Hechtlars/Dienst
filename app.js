@@ -705,6 +705,7 @@ function renderMonth() {
         <div class="swipe-content duty-row" role="button" tabindex="0">
           <div class="row-main">
             <div class="row-title">${fmtDate(dutyStart(duty))}</div>
+            <div class="row-subtitle duty-rounded-hours">${hourLabel(dutyRoundedHours(duty))} gerundet${openHouseEntry(duty) ? ' · Haus-Einsatz läuft noch' : ''}</div>
             <div class="row-subtitle">${dutyTimeText(duty)}</div>
             <div class="duty-summary">${count} ${count === 1 ? 'Einsatz' : 'Einsätze'} · Telefonisch: ${phone} Min. · Im Haus: ${house} Min.</div>
           </div><span class="chevron">›</span>
