@@ -100,6 +100,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    assert.equal(await page.locator('#calculationHelpContent').isVisible(),true);
    assert.match(await page.textContent('#calculationHelpContent'),/1 h Bewertungszeit/);
    assert.match(await page.textContent('#calculationHelpContent'),/50,96/);
+   await page.fill('#exampleDate','2026-10-06');
    await page.click('#calculateExample');
    assert.match(await page.textContent('#exampleResult'),/77,28/);
    await page.selectOption('#exampleType','Im Haus');await page.fill('#exampleDuration','65');await page.click('#calculateExample');
