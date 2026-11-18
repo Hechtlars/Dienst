@@ -1655,11 +1655,32 @@ render();
 
 // Ein Tipp auf den sichtbaren, abgedunkelten Hintergrund verwirft den geöffneten
 // Dialog wie „Abbrechen“. Gespeichert wird ausschließlich über die Speichern-Buttons.
+// Older browsers may not implement dialog light-dismiss (closedby="any").
+function isOutsideModal(x, y) {
+  const rect = modal.getBoundingClientRect();
+  return x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom;
+}
 modal.addEventListener('click', event => {
-  if (event.target === modal) {
-    modal.close();
-  }
+  if (modal.open && event.target === modal && isOutsideModal(event.clientX, event.clientY)) modal.close();
 });
+let backdropTouch = null;
+modal.addEventListener('touchstart', event => {
+  const finger = event.touches[0];
+  backdropTouch = event.target === modal && event.touches.length === 1 && isOutsideModal(finger.clientX, finger.clientY)
+    ? { id: finger.identifier, x: finger.clientX, y: finger.clientY } : null;
+}, { passive: true });
+modal.addEventListener('touchcancel', () => { backdropTouch = null; });
+modal.addEventListener('touchend', event => {
+  const start = backdropTouch;
+  backdropTouch = null;
+  const finger = start && Array.from(event.changedTouches).find(touch => touch.identifier === start.id);
+  if (!modal.open || !finger || event.touches.length || !event.cancelable ||
+      !isOutsideModal(finger.clientX, finger.clientY) ||
+      Math.hypot(finger.clientX - start.x, finger.clientY - start.y) > 12) return;
+  // Suppress the synthetic click so it cannot hit a control behind the sheet.
+  event.preventDefault();
+  modal.close();
+}, { passive: false });
 modal.addEventListener('close', () => {
   closePatientPhotoCamera();
   modal.classList.remove('action-sheet-open');

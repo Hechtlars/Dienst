@@ -8,7 +8,7 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
  for(const [browserType,width] of [[chromium,1280],[chromium,390],[webkit,390]]){
   const label=browserType.name()+'-'+width;
   const browser=await browserType.launch({headless:true});
-  const context=await browser.newContext({viewport:{width,height:844},timezoneId:'Europe/Berlin',acceptDownloads:true});
+  const context=await browser.newContext({viewport:{width,height:844},timezoneId:'Europe/Berlin',acceptDownloads:true,hasTouch:width<700});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:8765');
   await run(label+' Tarif, Rechnung, Migration',async()=>{
@@ -125,6 +125,14 @@ async function run(name,fn){try{await fn();results.push({name,status:'PASS'});}c
    assert.equal(await page.evaluate(()=>{const saturday=state.duties.find(d=>d.date==='2026-10-10'),sunday=state.duties.find(d=>d.date==='2026-10-11');return fmtTime(dutyStart(saturday))+'/'+fmtTime(dutyStart(sunday));}),'10:30/10:30');
    const initialDutyId=await page.evaluate(()=>state.duties.find(d=>d.date==='2026-10-05').id);await page.click('[data-view="monat"]');await page.evaluate(()=>{selectedMonth=new Date(2026,9,1);renderMonth();});await page.locator(`[data-duty="${initialDutyId}"] .swipe-content`).click();await page.click('#newHistoricalEntry');
    await page.fill('#entryDate','2026-10-06');await page.fill('#entryStart','03:00');await page.fill('#entryEnd','03:10');await page.fill('#entryNote','Test');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/50,96/);
+   await page.click('[data-kind="entry"] .swipe-content');
+   await page.fill('#entryNote','Nicht speichern');
+   const modalBox = await page.locator('#modal').boundingBox();
+   if (width < 700) await page.touchscreen.tap(width / 2, modalBox.y / 2);
+   else await page.mouse.click(width / 2, modalBox.y / 2);
+   await page.locator('#modal').waitFor({state:'hidden'});
+   assert.equal(await page.locator('#newHistoricalEntry').count(),1);
+   assert.doesNotMatch(await page.textContent('#mainContent'),/Nicht speichern/);
    await page.click('[data-kind="entry"] .swipe-content');await page.fill('#entryNote','Bearbeitet');await page.click('#saveEntry');assert.match(await page.textContent('#mainContent'),/Bearbeitet/);
   });
   await run(label+' Dienststunden in Monatsliste',async()=>{
